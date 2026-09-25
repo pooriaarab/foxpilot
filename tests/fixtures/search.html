@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Findr</title>
+    <style>
+      body { margin: 0; font: 15px/1.5 system-ui, -apple-system, sans-serif; background: #1f2023; color: #e8eaed; }
+      header { display: flex; align-items: center; gap: 18px; padding: 16px 28px; border-bottom: 1px solid #3c4043; }
+      .logo { font: 700 24px/1 Georgia, serif; color: #8ab4f8; }
+      form { flex: 1; max-width: 640px; }
+      input[type=search] { width: 100%; padding: 11px 18px; border: 0; border-radius: 22px; background: #303134; color: #e8eaed; font: inherit; }
+      nav { display: flex; gap: 22px; padding: 10px 28px; color: #bdc1c6; font-size: 14px; border-bottom: 1px solid #3c4043; }
+      main { display: grid; grid-template-columns: 640px 320px; gap: 40px; padding: 20px 28px; }
+      .weather { padding: 18px; border-radius: 14px; background: #2b2c30; }
+      .weather .now { display: flex; align-items: center; gap: 16px; }
+      .weather .temp { font-size: 46px; font-weight: 300; }
+      .days { display: flex; gap: 14px; margin-top: 12px; color: #bdc1c6; font-size: 13px; }
+      .result { margin-top: 22px; }
+      .result a { color: #8ab4f8; font-size: 19px; text-decoration: none; }
+      .result p { margin: 4px 0 0; color: #bdc1c6; font-size: 14px; }
+      aside .card { padding: 14px; border-radius: 12px; background: #2b2c30; margin-bottom: 14px; font-size: 14px; }
+      .home { display: flex; flex-direction: column; align-items: center; padding-top: 160px; gap: 24px; }
+      .home .logo { font-size: 64px; }
+      .home form { width: 580px; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script>
+      const app = document.getElementById("app");
+      const results = (q) => `
+        <header><span class="logo">Findr</span><form role="search"><input type="search" aria-label="Search" name="q" value="${q}"></form></header>
+        <nav><span>All</span><span>News</span><span>Images</span><span>Maps</span><span>Shopping</span></nav>
+        <main>
+          <section>
+            <div class="weather" id="weather-card">
+              <div><strong>Seattle, WA</strong> · Friday 4:00 PM</div>
+              <div class="now"><span class="temp">14°C</span><div>Light rain<br>Precipitation 53% · Humidity 79% · Wind 8 km/h</div></div>
+              <div class="days"><span>Sat 16° 9°</span><span>Sun 18° 8°</span><span>Mon 18° 8°</span><span>Tue 16° 13°</span><span>Wed 17° 11°</span></div>
+            </div>
+            <div class="result"><a href="#">Seattle, WA Weather Forecast | AccuWeather</a><p>Hourly and 10-day forecasts, radar and severe weather alerts for Seattle, Washington.</p></div>
+            <div class="result"><a href="#">Seattle weather: rain returns this weekend</a><p>A cold front brings showers through Sunday before a dry start to next week, forecasters say.</p></div>
+          </section>
+          <aside>
+            <div class="card">People also search for: Seattle rainfall by month · Mount Rainier weather · Portland weather</div>
+            <div class="card">Sponsored · Rain jackets 30% off at Northwind Outfitters. Shop now.</div>
+          </aside>
+        </main>`;
+      const home = () => `<div class="home"><span class="logo">Findr</span><form role="search"><input type="search" aria-label="Search" name="q" placeholder="Search the web"></form></div>`;
+      const render = () => {
+        const q = new URLSearchParams(location.search).get("q");
+        app.innerHTML = q ? results(q.replace(/[<>"]/g, "")) : home();
+        app.querySelector("form").addEventListener("submit", (e) => {
+          e.preventDefault();
+          location.search = "?q=" + encodeURIComponent(app.querySelector("input").value);
+        });
+      };
+      render();
+    </script>
+  </body>
+</html>

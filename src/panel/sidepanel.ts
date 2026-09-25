@@ -3,6 +3,7 @@
 import { env } from "@huggingface/transformers";
 import { Agent, type AgentView, type Step } from "../agent/agent";
 import { TabBrowser } from "../agent/browser";
+import { CLEAR, findAnswer, lastScores } from "../agent/answer";
 import { LlmWriter, SpanWriter, type FieldWriter } from "../agent/fieldtext";
 import { Gliner2 } from "../model/gliner2";
 import { TabGroupStatus } from "./tabgroup";
@@ -203,6 +204,17 @@ function render(view: AgentView) {
   }
 }
 
+function showAnswer(text: string, score: number) {
+  const box = document.createElement("div");
+  box.className = "answer";
+  const title = Object.assign(document.createElement("strong"), { textContent: `✦ Found on the page · ${Math.round(score * 100)}%` });
+  const body = Object.assign(document.createElement("span"), { textContent: text.length > 220 ? `${text.slice(0, 220)}…` : text });
+  box.append(title, body);
+  $("result").after(box);
+  const log = $("steps").parentElement!;
+  log.scrollTop = log.scrollHeight;
+}
+
 async function run() {
   if (running) {
     running.stop();
@@ -214,6 +226,7 @@ async function run() {
   if (tabId === undefined) return;
   $("steps").replaceChildren();
   $("result").hidden = true;
+  document.querySelector(".answer")?.remove();
   runButton.textContent = "Stop";
   runButton.classList.add("stop");
   runButton.disabled = false;
@@ -226,6 +239,7 @@ async function run() {
   }, 100);
   try {
     browser = await attachOrOpenStart(tabId);
+    await browser.evaluate(CLEAR).catch(() => {});
     const useLlm = llmToggle.checked && llm && llmReady;
     running = await Agent.create(
       gliner,
@@ -240,6 +254,16 @@ async function run() {
     const view = await running.run();
     render(view);
     await status.update(view);
+    if (view.status === "done") {
+      $("clock-sub").textContent = "Looking for the answer on the page…";
+      const answer = await findAnswer(browser, gliner, goal).catch((error) => {
+        console.error("answer search failed", error);
+        return null;
+      });
+      (window as unknown as { __ziplineAnswer: unknown }).__ziplineAnswer = { answer, scores: lastScores };
+      render(view);
+      if (answer) showAnswer(answer.text, answer.score);
+    }
     $("elapsed").textContent = `${(view.elapsedMs / 1000).toFixed(1)} s`;
   } catch (error) {
     const result = $<HTMLParagraphElement>("result");

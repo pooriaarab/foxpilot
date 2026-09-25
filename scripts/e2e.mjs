@@ -4,14 +4,22 @@
 // Usage: pnpm build && node scripts/e2e.mjs [flights|maps|wiki] [--llm]
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createReadStream } from "node:fs";
+import { createServer } from "node:http";
 import { chromium } from "playwright";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+// Local fixtures, so development runs do not hit real sites.
+const fixtures = createServer((req, res) => {
+  res.setHeader("content-type", "text/html");
+  createReadStream(join(root, "tests/fixtures", new URL(req.url, "http://x").pathname.replace(/^\/+/, "") || "search.html")).on("error", () => res.writeHead(404).end()).pipe(res);
+}).listen(5402);
 const TASKS = {
   flights: ["https://www.google.com/travel/flights?hl=en", "Find a one-way ticket from New York to San Francisco on October 9, 2026."],
   maps: ["https://www.google.com/maps?hl=en", "Get directions from Berlin Hauptbahnhof to Brandenburg Gate."],
   walking: ["https://www.google.com/maps?hl=en", "Get directions from Berlin Hauptbahnhof to Brandenburg Gate. Select Walking."],
   newtab: ["chrome://newtab/", "Weather in Seattle"],
+  local: ["http://localhost:5402/search.html", "weather seattle"],
   wiki: ["https://en.wikipedia.org/wiki/Main_Page", "Search Wikipedia for the Golden Gate Bridge."],
 };
 const [url, goal] = TASKS[process.argv[2] ?? "flights"];
@@ -54,7 +62,13 @@ await panel.waitForFunction(() => !document.getElementById("result")?.hidden, nu
 const steps = await panel.locator("#steps li").allTextContents();
 for (const s of steps) console.log("  ", s.replace(/\s+/g, " ").trim());
 console.log("tab group:", await worker.evaluate(async (id) => { const t = await chrome.tabs.get(id); return t.groupId === -1 ? "(none)" : (await chrome.tabGroups.get(t.groupId)).title; }, tabId));
-await sleep(4500);
+await sleep(1500);
+await panel.waitForFunction(() => "__ziplineAnswer" in window || !/Done/.test(document.getElementById("result")?.textContent ?? ""), null, { timeout: 30_000 }).catch(() => {});
+console.log("answer:", await panel.locator(".answer").textContent().catch(() => "(none)"));
+const dbg = await panel.evaluate(() => window.__ziplineAnswer).catch(() => null);
+if (dbg) for (const c of [...(dbg.scores ?? [])].sort((a, b) => b.score - a.score).slice(0, 8)) console.log("   ", c.score.toFixed(2), c.text);
+await sleep(3000);
+await page.screenshot({ path: join(root, "e2e-answer.png") }).catch(() => {});
 console.log("tab group after 4.5 s:", await worker.evaluate(async (id) => (await chrome.tabs.get(id)).groupId === -1 ? "(ungrouped)" : "still grouped", tabId));
 console.log("result:", await panel.locator("#result").textContent(), "| clock:", await panel.locator("#elapsed").textContent());
 if (process.env.DUMP) {
@@ -64,3 +78,4 @@ if (process.env.DUMP) {
 }
 await page.screenshot({ path: join(root, "e2e-page.png") });
 await context.close();
+fixtures.close();

@@ -370,3 +370,19 @@ textarea:focus {
 .result.error {
   background: color-mix(in srgb, var(--bad) 14%, transparent);
 }
+
+.answer {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.answer strong {
+  color: var(--accent);
+  font-size: 12px;
+}
