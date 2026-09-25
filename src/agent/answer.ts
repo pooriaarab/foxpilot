@@ -77,15 +77,21 @@ export let lastScores: { text: string; score: number }[] = [];
 const COLLECT_ROWS = `(() => {
   document.getElementById('zipline-answer')?.remove();
   const text = e => (e.innerText || '').replace(/\\s+/g, ' ').trim();
-  const money = /[$€£¥₹]\\s?\\d|\\d\\s?(USD|EUR|GBP)\\b/;
-  const rows = [...document.querySelectorAll('li,[role="listitem"],[role="row"]')].filter(e => {
+  const money = /[$€£¥₹]\\s?\\d|\\d\\s?(USD|EUR|GBP)\\b|\\d\\s?(US )?dollars\\b/i;
+  const items = [...document.querySelectorAll('li,[role="listitem"],[role="row"]')];
+  const stats = { items: items.length, priced: 0, long: 0, hidden: 0 };
+  const rows = items.filter(e => {
     const t = text(e);
-    // Rows can carry long screen-reader text ("Leaves … at 6:00 AM"), so allow up to 2000 chars.
-    return t.length >= 20 && t.length <= 2000 && money.test(t) && e.checkVisibility({checkOpacity:true, checkVisibilityCSS:true});
+    if (t.length < 20 || !money.test(t)) return false;
+    stats.priced++;
+    // Rows can carry long screen-reader text ("Leaves … at 6:00 AM").
+    if (t.length > 2000) { stats.long++; return false; }
+    if (!e.checkVisibility({checkOpacity:true, checkVisibilityCSS:true})) { stats.hidden++; return false; }
+    return true;
   });
   const inner = rows.filter(r => !rows.some(o => o !== r && r.contains(o))).slice(0, 40);
   window.__ziplineBlocks = inner;
-  return inner.map((e, i) => ({ i, text: text(e).slice(0, 2000) }));
+  return { stats, rows: inner.map((e, i) => ({ i, text: text(e).slice(0, 2000) })) };
 })()`;
 
 const ROW_TYPES = {
@@ -98,8 +104,15 @@ const ROW_TYPES = {
 async function pickRow(browser: TabBrowser, model: Scorer, goal: string): Promise<Answer | null> {
   const q = qualifiers(goal);
   if (!q) return null;
-  const blocks = await browser.evaluate<{ i: number; text: string }[]>(COLLECT_ROWS);
-  if (!blocks?.length) return null;
+  const collected = await browser.evaluate<{ stats: { items: number; priced: number; long: number; hidden: number }; rows: { i: number; text: string }[] }>(COLLECT_ROWS);
+  const blocks = collected?.rows ?? [];
+  if (!blocks.length) {
+    const st = collected?.stats;
+    lastNote = st
+      ? `No result rows found: checked ${st.items} list items, ${st.priced} with a price (${st.long} too long, ${st.hidden} hidden).`
+      : "No result rows found.";
+    return null;
+  }
   const rows: Row[] = [];
   for (const block of blocks) {
     const found = await model.extractEntities(block.text.slice(0, 500), ROW_TYPES);

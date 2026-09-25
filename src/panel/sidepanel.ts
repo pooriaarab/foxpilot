@@ -263,14 +263,16 @@ async function run() {
     await status.update(view);
     if (view.status === "done") {
       $("clock-sub").textContent = "Looking for the answer on the page…";
+      let failure = "";
       const answer = await findAnswer(browser, gliner, goal).catch((error) => {
         console.error("answer search failed", error);
+        failure = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
         return null;
       });
       (window as unknown as { __ziplineAnswer: unknown }).__ziplineAnswer = { answer, scores: lastScores, rows: lastRows };
       render(view);
       if (answer) showAnswer(answer.text, answer.score, answer.label);
-      else if (lastNote) showNote(lastNote);
+      else showNote(failure ? `Answer search failed: ${failure}` : lastNote || "Nothing on the page stood out as the answer.");
     }
     $("elapsed").textContent = `${(view.elapsedMs / 1000).toFixed(1)} s`;
   } catch (error) {
