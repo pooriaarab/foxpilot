@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Flights · New York to San Francisco</title>
+    <style>
+      body { margin: 0; font: 15px/1.5 system-ui, -apple-system, sans-serif; background: #202124; color: #e8eaed; }
+      header { padding: 16px 28px; border-bottom: 1px solid #3c4043; font-weight: 600; }
+      .summary { display: flex; gap: 12px; padding: 16px 28px; }
+      .tab { flex: 1; padding: 14px; border: 1px solid #3c4043; border-radius: 10px; text-align: center; }
+      h2 { padding: 0 28px; font-size: 22px; }
+      ul { list-style: none; margin: 0 28px 24px; padding: 0; border: 1px solid #3c4043; border-radius: 12px; }
+      li { display: grid; grid-template-columns: 260px 160px 140px 160px 80px; gap: 12px; padding: 16px 20px; border-bottom: 1px solid #3c4043; }
+      li:last-child { border-bottom: 0; }
+      .muted { color: #9aa0a6; font-size: 13px; }
+      .price { text-align: right; font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <header>One way · 1 · Economy · New York → San Francisco · Fri, Oct 9</header>
+    <div class="summary"><div class="tab">Best</div><div class="tab">Cheapest from $254</div></div>
+    <h2>Top flights</h2>
+    <ul id="top"></ul>
+    <h2>Other departing flights</h2>
+    <ul id="other"></ul>
+    <script>
+      const rows = [
+        ["top", "6:15 PM – 11:58 PM", "Delta", "8 hr 43 min", "LGA–SFO", "1 stop", "1 hr 30 min MSP", 254],
+        ["top", "6:59 PM – 12:44 AM+1", "American", "8 hr 45 min", "LGA–SFO", "1 stop", "45 min DFW", 254],
+        ["top", "9:25 PM – 1:07 AM+1", "American", "6 hr 42 min", "JFK–SFO", "Nonstop", "", 309],
+        ["other", "5:06 PM – 11:07 PM", "American", "9 hr 1 min", "JFK–SFO", "1 stop", "1 hr 7 min CLT", 319],
+        ["other", "2:39 PM – 8:24 PM", "American", "8 hr 45 min", "LGA–SFO", "1 stop", "51 min CLT", 339],
+        ["other", "6:00 AM – 9:14 AM", "United", "6 hr 14 min", "EWR–SFO", "Nonstop", "", 388],
+        ["other", "8:15 PM – 11:32 PM", "United", "6 hr 17 min", "EWR–SFO", "Nonstop", "", 388],
+        ["other", "6:59 AM – 10:32 AM", "American", "6 hr 33 min", "JFK–SFO", "Nonstop", "", 400],
+        ["other", "7:00 AM – 10:29 AM", "Delta", "6 hr 29 min", "JFK–SFO", "Nonstop", "", 429],
+        ["other", "11:40 AM – 3:05 PM", "JetBlue", "6 hr 25 min", "JFK–SFO", "Nonstop", "", 469],
+      ];
+      for (const [list, time, airline, duration, route, stops, via, price] of rows) {
+        const li = document.createElement("li");
+        li.innerHTML = `<div>${time}<div class="muted">${airline}</div></div><div>${duration}<div class="muted">${route}</div></div><div>${stops}<div class="muted">${via}</div></div><div class="muted">CO2e</div><div class="price">$${price}</div>`;
+        document.getElementById(list).append(li);
+      }
+    </script>
+  </body>
+</html>

@@ -5,8 +5,9 @@
 // goal refers to. Nothing is highlighted below 0.5.
 import type { TabBrowser } from "./browser";
 import type { Scorer } from "./controller";
+import { choose, describe, parseClock, parseDuration, parseMoney, qualifiers, type Row } from "./pick";
 
-export type Answer = { text: string; score: number };
+export type Answer = { text: string; score: number; label?: string };
 
 const MAX_CANDIDATES = 24;
 
@@ -37,7 +38,7 @@ const COLLECT = `(() => {
   return out.map((e, i) => ({ i, text: text(e).slice(0, 300) }));
 })()`;
 
-const HIGHLIGHT = (index: number) => `((index) => {
+const HIGHLIGHT = (index: number, label = "✦ Zipline found this") => `((index, label) => {
   const e = window.__ziplineBlocks?.[index];
   if (!e) return false;
   e.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -52,7 +53,8 @@ const HIGHLIGHT = (index: number) => `((index) => {
     '.chip{position:absolute;transform:translateY(-100%);margin-top:-12px;padding:5px 11px;border-radius:999px;' +
     'background:linear-gradient(135deg,#0f9d8a,#b7e34d);color:#06201c;font:700 13px/1.2 system-ui,-apple-system,sans-serif;' +
     'box-shadow:0 6px 20px rgba(0,0,0,.35);white-space:nowrap}' +
-    '</style><div class="box"></div><div class="chip">✦ Zipline found this</div>';
+    '</style><div class="box"></div><div class="chip"></div>';
+  root.querySelector('.chip').textContent = label;
   document.body.append(host);
   const place = () => {
     const r = e.getBoundingClientRect();
@@ -66,12 +68,64 @@ const HIGHLIGHT = (index: number) => `((index) => {
   // Dismiss on the first click anywhere.
   addEventListener('pointerdown', () => host.remove(), { once: true });
   return true;
-})(${index})`;
+})(${index}, ${JSON.stringify(label)})`;
 
 /** Candidate scores from the last search, for debugging. */
 export let lastScores: { text: string; score: number }[] = [];
 
+/** Rows of a results list: list items with a price, innermost first, top to bottom. */
+const COLLECT_ROWS = `(() => {
+  document.getElementById('zipline-answer')?.remove();
+  const text = e => (e.innerText || '').replace(/\\s+/g, ' ').trim();
+  const money = /[$€£¥₹]\\s?\\d|\\d\\s?(USD|EUR|GBP)\\b/;
+  const rows = [...document.querySelectorAll('li,[role="listitem"],[role="row"]')].filter(e => {
+    const t = text(e);
+    return t.length >= 20 && t.length <= 600 && money.test(t) && e.checkVisibility({checkOpacity:true, checkVisibilityCSS:true});
+  });
+  const inner = rows.filter(r => !rows.some(o => o !== r && r.contains(o))).slice(0, 40);
+  window.__ziplineBlocks = inner;
+  return inner.map((e, i) => ({ i, text: text(e).slice(0, 400) }));
+})()`;
+
+const ROW_TYPES = {
+  price: "a price or fare",
+  time: "a clock time",
+  duration: "a length of time, such as a flight duration",
+};
+
+/** For goals with qualifiers ("cheapest morning"): read each result row, then filter and rank in code. */
+async function pickRow(browser: TabBrowser, model: Scorer, goal: string): Promise<Answer | null> {
+  const q = qualifiers(goal);
+  if (!q) return null;
+  const blocks = await browser.evaluate<{ i: number; text: string }[]>(COLLECT_ROWS);
+  if (!blocks?.length) return null;
+  const rows: Row[] = [];
+  for (const block of blocks) {
+    const found = await model.extractEntities(block.text, ROW_TYPES);
+    rows.push({
+      i: block.i,
+      text: block.text,
+      price: parseMoney(found.price?.[0]?.text) ?? parseMoney(block.text.match(/[$€£¥₹]\s?[\d,]+(?:\.\d+)?/)?.[0]),
+      depart: parseClock(found.time?.[0]?.text) ?? parseClock(block.text),
+      // Durations have a fixed shape ("6 hr 14 min"); GLiNER's span can stop at "6 hr".
+      duration: parseDuration(block.text.match(/\d+\s*h(?:r|ours?)?(?:\s*\d+\s*m(?:in)?)?|\d+\s*min\b/i)?.[0]) ?? parseDuration(found.duration?.[0]?.text),
+      nonstop: /\b(nonstop|non-stop|direct)\b/i.test(block.text),
+    });
+  }
+  lastRows = rows;
+  const row = choose(rows, q);
+  if (!row) return null;
+  const label = describe(q, row);
+  await browser.evaluate(HIGHLIGHT(row.i, `✦ ${label}`));
+  return { text: row.text, score: 1, label };
+}
+
+/** Rows read in the last pick, for debugging. */
+export let lastRows: Row[] = [];
+
 export async function findAnswer(browser: TabBrowser, model: Scorer, goal: string): Promise<Answer | null> {
+  const picked = await pickRow(browser, model, goal);
+  if (picked) return picked;
   const blocks = await browser.evaluate<{ i: number; text: string }[]>(COLLECT);
   if (!blocks?.length) return null;
   // Naming what an answer card is, and what the other blocks are, matters: with

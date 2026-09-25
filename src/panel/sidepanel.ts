@@ -3,7 +3,7 @@
 import { env } from "@huggingface/transformers";
 import { Agent, type AgentView, type Step } from "../agent/agent";
 import { TabBrowser } from "../agent/browser";
-import { CLEAR, findAnswer, lastScores } from "../agent/answer";
+import { CLEAR, findAnswer, lastRows, lastScores } from "../agent/answer";
 import { LlmWriter, SpanWriter, type FieldWriter } from "../agent/fieldtext";
 import { Gliner2 } from "../model/gliner2";
 import { TabGroupStatus } from "./tabgroup";
@@ -204,10 +204,10 @@ function render(view: AgentView) {
   }
 }
 
-function showAnswer(text: string, score: number) {
+function showAnswer(text: string, score: number, label?: string) {
   const box = document.createElement("div");
   box.className = "answer";
-  const title = Object.assign(document.createElement("strong"), { textContent: `✦ Found on the page · ${Math.round(score * 100)}%` });
+  const title = Object.assign(document.createElement("strong"), { textContent: label ? `✦ ${label}` : `✦ Found on the page · ${Math.round(score * 100)}%` });
   const body = Object.assign(document.createElement("span"), { textContent: text.length > 220 ? `${text.slice(0, 220)}…` : text });
   box.append(title, body);
   $("result").after(box);
@@ -260,9 +260,9 @@ async function run() {
         console.error("answer search failed", error);
         return null;
       });
-      (window as unknown as { __ziplineAnswer: unknown }).__ziplineAnswer = { answer, scores: lastScores };
+      (window as unknown as { __ziplineAnswer: unknown }).__ziplineAnswer = { answer, scores: lastScores, rows: lastRows };
       render(view);
-      if (answer) showAnswer(answer.text, answer.score);
+      if (answer) showAnswer(answer.text, answer.score, answer.label);
     }
     $("elapsed").textContent = `${(view.elapsedMs / 1000).toFixed(1)} s`;
   } catch (error) {
