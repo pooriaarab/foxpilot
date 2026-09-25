@@ -65,15 +65,18 @@ const MARK = (target: { x: number; y: number; rect: { left: number; top: number;
   host.id = 'zipline-action';
   host.style.cssText = 'position:fixed;inset:0;z-index:2147483647;pointer-events:none';
   const root = host.attachShadow({ mode: 'open' });
-  root.innerHTML = '<style>' +
-    '.ring{position:fixed;border-radius:10px;outline:3px solid #2cc4ad;outline-offset:4px;background:rgba(44,196,173,.12);box-shadow:0 0 24px 4px rgba(44,196,173,.55);animation:in .18s ease-out}' +
+  // Built without innerHTML: pages that enforce Trusted Types (Google Flights)
+  // reject HTML strings, and a constructed stylesheet is not blocked by CSP.
+  const sheet = new CSSStyleSheet();
+  sheet.replaceSync('.ring{position:fixed;border-radius:10px;outline:3px solid #2cc4ad;outline-offset:4px;background:rgba(44,196,173,.12);box-shadow:0 0 24px 4px rgba(44,196,173,.55);animation:in .18s ease-out}' +
     '.tag{position:fixed;transform:translateY(-100%);margin-top:-10px;padding:3px 9px;border-radius:999px;background:#0f9d8a;color:#fff;' +
     'font:600 12px/1.4 system-ui,-apple-system,sans-serif;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.35);max-width:420px;overflow:hidden;text-overflow:ellipsis}' +
     '.dot{position:fixed;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;background:rgba(183,227,77,.9);animation:ripple .6s ease-out forwards}' +
     '@keyframes in{from{opacity:0;transform:scale(1.06)}}' +
     '@keyframes ripple{to{transform:scale(3.2);opacity:0}}' +
-    '.fade{transition:opacity .35s ease;opacity:0}' +
-    '</style><div class="ring"></div><div class="tag"></div><div class="dot"></div>';
+    '.fade{transition:opacity .35s ease;opacity:0}');
+  root.adoptedStyleSheets = [sheet];
+  for (const name of ['ring', 'tag', 'dot']) { const el = document.createElement('div'); el.className = name; root.append(el); }
   const ring = root.querySelector('.ring'), tag = root.querySelector('.tag'), dot = root.querySelector('.dot');
   Object.assign(ring.style, { left: t.rect.left + 'px', top: t.rect.top + 'px', width: t.rect.width + 'px', height: t.rect.height + 'px' });
   Object.assign(tag.style, { left: t.rect.left + 'px', top: t.rect.top + 'px' });
@@ -115,10 +118,15 @@ export class TabBrowser {
   }
 
   async evaluate<T = unknown>(expression: string, awaitPromise = false): Promise<T> {
-    const response = await this.call<{ result?: { value?: T }; exceptionDetails?: unknown }>("Runtime.evaluate", {
-      expression, returnByValue: true, awaitPromise,
-    });
-    if (response.exceptionDetails) throw new StalePage("Document changed during evaluation");
+    const response = await this.call<{
+      result?: { value?: T };
+      exceptionDetails?: { text?: string; exception?: { description?: string } };
+    }>("Runtime.evaluate", { expression, returnByValue: true, awaitPromise });
+    if (response.exceptionDetails) {
+      // Usually the document navigated mid-evaluation; keep the page's own message for the rest.
+      const detail = response.exceptionDetails.exception?.description?.split("\n")[0] ?? response.exceptionDetails.text;
+      throw new StalePage(`Document changed during evaluation${detail ? ` (${detail})` : ""}`);
+    }
     return response.result?.value as T;
   }
 

@@ -2,6 +2,8 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <!-- Enforce Trusted Types like Google Flights: HTML strings assigned to innerHTML throw. -->
+    <meta http-equiv="Content-Security-Policy" content="require-trusted-types-for 'script'" />
     <title>Flights · New York to San Francisco</title>
     <style>
       body { margin: 0; font: 15px/1.5 system-ui, -apple-system, sans-serif; background: #202124; color: #e8eaed; }
@@ -24,6 +26,7 @@
     <h2>Other departing flights</h2>
     <ul id="other"></ul>
     <script>
+      const html = trustedTypes.createPolicy("fixture", { createHTML: (s) => s });
       const rows = [
         ["top", "6:15 PM – 11:58 PM", "Delta", "8 hr 43 min", "LGA–SFO", "1 stop", "1 hr 30 min MSP", 254],
         ["top", "6:59 PM – 12:44 AM+1", "American", "8 hr 45 min", "LGA–SFO", "1 stop", "45 min DFW", 254],
@@ -41,7 +44,7 @@
         // Screen-reader text like real results pages carry (visually hidden, still in innerText).
         const [dep, arr] = time.split(" – ");
         const sr = `<span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">From ${price} US dollars. ${stops === "Nonstop" ? "Nonstop" : "1 stop"} flight with ${airline}. Leaves ${route.split("–")[0]} airport at ${dep} on Friday, October 9 and arrives at ${route.split("–")[1]} airport at ${arr} on Friday, October 9. Total duration ${duration}. ${via ? "Layover (1 of 1) is a " + via + " layover." : ""} Carbon emissions estimate: 444 kilograms. Select flight.</span>`;
-        li.innerHTML = sr + `<div>${time}<div class="muted">${airline}</div></div><div>${duration}<div class="muted">${route}</div></div><div>${stops}<div class="muted">${via}</div></div><div class="muted">CO2e</div><div class="price">$${price}</div>`;
+        li.innerHTML = html.createHTML(sr + `<div>${time}<div class="muted">${airline}</div></div><div>${duration}<div class="muted">${route}</div></div><div>${stops}<div class="muted">${via}</div></div><div class="muted">CO2e</div><div class="price">$${price}</div>`);
         document.getElementById(list).append(li);
       }
     </script>

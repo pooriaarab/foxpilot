@@ -2,6 +2,8 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <!-- Enforce Trusted Types like Google Flights: HTML strings assigned to innerHTML throw. -->
+    <meta http-equiv="Content-Security-Policy" content="require-trusted-types-for 'script'" />
     <title>Findr</title>
     <style>
       body { margin: 0; font: 15px/1.5 system-ui, -apple-system, sans-serif; background: #1f2023; color: #e8eaed; }
@@ -27,6 +29,7 @@
   <body>
     <div id="app"></div>
     <script>
+      const html = trustedTypes.createPolicy("fixture", { createHTML: (s) => s });
       const app = document.getElementById("app");
       const results = (q) => `
         <header><span class="logo">Findr</span><form role="search"><input type="search" aria-label="Search" name="q" value="${q}"></form></header>
@@ -67,7 +70,7 @@
       const render = () => {
         const q = new URLSearchParams(location.search).get("q");
         const safe = (q || "").replace(/[<>"]/g, "");
-        app.innerHTML = !q ? home() : /stock/i.test(q) ? stock(safe) : results(safe);
+        app.innerHTML = html.createHTML(!q ? home() : /stock/i.test(q) ? stock(safe) : results(safe));
         app.querySelector("form").addEventListener("submit", (e) => {
           e.preventDefault();
           location.search = "?q=" + encodeURIComponent(app.querySelector("input").value);

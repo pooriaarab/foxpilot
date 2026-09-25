@@ -46,14 +46,17 @@ const HIGHLIGHT = (index: number, label = "✦ Zipline found this") => `((index,
   host.id = 'zipline-answer';
   host.style.cssText = 'position:absolute;left:0;top:0;width:0;height:0;z-index:2147483647;pointer-events:none';
   const root = host.attachShadow({ mode: 'open' });
-  root.innerHTML = '<style>' +
-    '.box{position:absolute;border-radius:14px;outline:3px solid #2cc4ad;outline-offset:6px;' +
+  // Built without innerHTML: pages that enforce Trusted Types (Google Flights)
+  // reject HTML strings, and a constructed stylesheet is not blocked by CSP.
+  const sheet = new CSSStyleSheet();
+  sheet.replaceSync('.box{position:absolute;border-radius:14px;outline:3px solid #2cc4ad;outline-offset:6px;' +
     'box-shadow:0 0 0 9999px rgba(8,10,12,.28),0 0 42px 8px rgba(44,196,173,.55);transition:all .35s ease;animation:pulse 1.6s ease-in-out 2}' +
     '@keyframes pulse{50%{box-shadow:0 0 0 9999px rgba(8,10,12,.28),0 0 64px 16px rgba(183,227,77,.6)}}' +
     '.chip{position:absolute;transform:translateY(-100%);margin-top:-12px;padding:5px 11px;border-radius:999px;' +
     'background:linear-gradient(135deg,#0f9d8a,#b7e34d);color:#06201c;font:700 13px/1.2 system-ui,-apple-system,sans-serif;' +
-    'box-shadow:0 6px 20px rgba(0,0,0,.35);white-space:nowrap}' +
-    '</style><div class="box"></div><div class="chip"></div>';
+    'box-shadow:0 6px 20px rgba(0,0,0,.35);white-space:nowrap}');
+  root.adoptedStyleSheets = [sheet];
+  for (const name of ['box', 'chip']) { const el = document.createElement('div'); el.className = name; root.append(el); }
   root.querySelector('.chip').textContent = label;
   document.body.append(host);
   const place = () => {
