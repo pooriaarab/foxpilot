@@ -58,6 +58,17 @@ if (useLlm) {
 }
 await panel.locator("#goal").fill(goal);
 await panel.locator("#run").click();
+if (process.env.MARKSHOT) {
+  // Capture the page while an action highlight is showing.
+  for (let i = 0; i < 200; i++) {
+    if (await page.evaluate(() => !!document.getElementById("zipline-action")).catch(() => false)) {
+      await page.screenshot({ path: process.env.MARKSHOT });
+      console.log("captured action highlight");
+      break;
+    }
+    await sleep(25);
+  }
+}
 await panel.waitForFunction(() => !document.getElementById("result")?.hidden, null, { timeout: 180_000 });
 
 const steps = await panel.locator("#steps li").allTextContents();

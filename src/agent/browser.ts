@@ -51,11 +51,50 @@ const TARGET = `(action => {
     e.dispatchEvent(new Event('input',{bubbles:true}));
     e.dispatchEvent(new Event('change',{bubbles:true}));
   }
-  return {x,y};
+  return {x,y,rect:{left:r.left,top:r.top,width:r.width,height:r.height}};
 })`;
+
+/**
+ * Shows what Zipline is about to touch: a ring around the element, a label
+ * for the action and a ripple at the click point. Drawn in a shadow root with
+ * pointer-events off, so it never intercepts input or reads as a control.
+ */
+const MARK = (target: { x: number; y: number; rect: { left: number; top: number; width: number; height: number } }, label: string) => `((t, label) => {
+  document.getElementById('zipline-action')?.remove();
+  const host = document.createElement('div');
+  host.id = 'zipline-action';
+  host.style.cssText = 'position:fixed;inset:0;z-index:2147483647;pointer-events:none';
+  const root = host.attachShadow({ mode: 'open' });
+  root.innerHTML = '<style>' +
+    '.ring{position:fixed;border-radius:10px;outline:3px solid #2cc4ad;outline-offset:4px;background:rgba(44,196,173,.12);box-shadow:0 0 24px 4px rgba(44,196,173,.55);animation:in .18s ease-out}' +
+    '.tag{position:fixed;transform:translateY(-100%);margin-top:-10px;padding:3px 9px;border-radius:999px;background:#0f9d8a;color:#fff;' +
+    'font:600 12px/1.4 system-ui,-apple-system,sans-serif;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.35);max-width:420px;overflow:hidden;text-overflow:ellipsis}' +
+    '.dot{position:fixed;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;background:rgba(183,227,77,.9);animation:ripple .6s ease-out forwards}' +
+    '@keyframes in{from{opacity:0;transform:scale(1.06)}}' +
+    '@keyframes ripple{to{transform:scale(3.2);opacity:0}}' +
+    '.fade{transition:opacity .35s ease;opacity:0}' +
+    '</style><div class="ring"></div><div class="tag"></div><div class="dot"></div>';
+  const ring = root.querySelector('.ring'), tag = root.querySelector('.tag'), dot = root.querySelector('.dot');
+  Object.assign(ring.style, { left: t.rect.left + 'px', top: t.rect.top + 'px', width: t.rect.width + 'px', height: t.rect.height + 'px' });
+  Object.assign(tag.style, { left: t.rect.left + 'px', top: t.rect.top + 'px' });
+  Object.assign(dot.style, { left: t.x + 'px', top: t.y + 'px' });
+  tag.textContent = '⚡ ' + label;
+  document.documentElement.append(host);
+  setTimeout(() => root.querySelectorAll('.ring,.tag').forEach(e => e.classList.add('fade')), 650);
+  setTimeout(() => host.remove(), 1100);
+  return true;
+})(${JSON.stringify(target)}, ${JSON.stringify(label)})`;
+
+function actionLabel(action: Action, text?: string | null): string {
+  if (action.kind === "fill") return `type "${(text ?? "").slice(0, 40)}"`;
+  if (action.kind === "select") return `select ${action.label.split(" → ").pop()}`;
+  return "click";
+}
 
 export class TabBrowser {
   private afterInput: Action | null = null;
+  /** Outline each element before acting on it. */
+  showActions = true;
 
   private constructor(readonly tabId: number) {}
 
@@ -156,10 +195,16 @@ export class TabBrowser {
         );
         await sleep(50);
       }
-      const target = await this.evaluate<{ x: number; y: number } | null>(`${TARGET}(${JSON.stringify(action)})`);
+      const target = await this.evaluate<{ x: number; y: number; rect: { left: number; top: number; width: number; height: number } } | null>(
+        `${TARGET}(${JSON.stringify(action)})`,
+      );
       if (!target) {
         if (kind === "select") throw new Error("Dropdown execution was not confirmed; inspect before retrying.");
         throw new StalePage("Target changed or is covered. Observe again.");
+      }
+      if (this.showActions) {
+        await this.evaluate(MARK(target, actionLabel(action, text))).catch(() => {});
+        await sleep(120);
       }
       if (kind !== "select") {
         for (const type of ["mousePressed", "mouseReleased"]) {
