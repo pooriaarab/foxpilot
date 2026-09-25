@@ -87,3 +87,18 @@ export function describe(q: Qualifiers, row: Row): string {
   const title = words.join(" ");
   return row.price !== undefined ? `${title[0]!.toUpperCase()}${title.slice(1)} · $${row.price}` : title;
 }
+
+/**
+ * The goal without its result qualifiers, for filling the search form:
+ * "Cheapest morning one-way ticket from New York…" → "one-way ticket from New
+ * York…". GLiNER reads "morning" as a time and the agent would type it into a
+ * field; qualifiers are for choosing among the results afterwards.
+ */
+export function stripQualifiers(goal: string): string {
+  return goal
+    .replace(/\b(?:in the |on the |at )?(?:morning|afternoon|evening|night)\b/gi, " ")
+    .replace(/\b(?:cheapest|lowest[- ]priced?|least expensive|most expensive|priciest|highest[- ]priced?|fastest|shortest|quickest|earliest|latest|nonstop|non-stop|direct)\b/gi, " ")
+    .replace(/\s+([,.;:!?])/g, "$1")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}

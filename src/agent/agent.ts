@@ -5,6 +5,7 @@ import { choose, requirements, type Decision, type Memory, type Part, type Score
 import { firstDate, normalise } from "./dates";
 import { Refused, type FieldContext, type FieldWriter } from "./fieldtext";
 import { searchQuery } from "./search";
+import { stripQualifiers } from "./pick";
 import type { HistoryEntry, Page } from "./types";
 
 export const MAX_STEPS = 60;
@@ -116,7 +117,8 @@ export class Agent {
       },
       classify: (text, name, labels) => model.classify(text, name, labels),
     };
-    const parts = await requirements(task, recording);
+    // Qualifiers ("cheapest", "morning") choose among results; they are not field values.
+    const parts = await requirements(stripQualifiers(task) || task, recording);
     const agent = new Agent(model, browser, task, parts, makeWriter(parts, found), onUpdate, found);
     agent.page = await browser.observe();
     return agent;

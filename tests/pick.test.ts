@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { choose, describe as label, parseClock, parseDuration, parseMoney, qualifiers, type Row } from "../src/agent/pick";
+import { choose, describe as label, parseClock, parseDuration, parseMoney, qualifiers, stripQualifiers, type Row } from "../src/agent/pick";
 
 describe("qualifiers", () => {
   it("reads order, time window and nonstop from the goal", () => {
@@ -35,5 +35,16 @@ describe("choose", () => {
   });
   it("describes the pick", () => {
     expect(label({ order: "price-asc", windowName: "morning", window: [300, 720] }, rows[1]!)).toBe("Cheapest morning option · $388");
+  });
+});
+
+describe("stripQualifiers", () => {
+  it("leaves what the search form needs", () => {
+    expect(stripQualifiers("Cheapest morning one-way ticket from New York to San Francisco on October 9, 2026."))
+      .toBe("one-way ticket from New York to San Francisco on October 9, 2026.");
+    expect(stripQualifiers("cheapest one-way ticket from New York to San Francisco on October 9, 2026 morning"))
+      .toBe("one-way ticket from New York to San Francisco on October 9, 2026");
+    expect(stripQualifiers("fastest nonstop flight to Denver in the evening")).toBe("flight to Denver");
+    expect(stripQualifiers("Get directions from Berlin Hauptbahnhof to Brandenburg Gate.")).toBe("Get directions from Berlin Hauptbahnhof to Brandenburg Gate.");
   });
 });
