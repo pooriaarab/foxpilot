@@ -1,8 +1,8 @@
 {
-  "name": "ultrafast-web",
+  "name": "zipline",
   "version": "0.1.0",
   "private": true,
-  "description": "A browser agent that runs GLiNER2 (and optionally a small LLM) entirely in Chrome on WebGPU",
+  "description": "Zipline: a browser agent that runs entirely in Chrome, with GLiNER2 (and an optional small LLM) on WebGPU",
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
