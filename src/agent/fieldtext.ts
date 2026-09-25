@@ -6,6 +6,9 @@
 // Either may refuse; the agent then stops offering that field.
 import { pipeline, type TextGenerationPipeline } from "@huggingface/transformers";
 import type { Part } from "./controller";
+import { isSearchField, searchQuery } from "./search";
+
+export { isSearchField, searchQuery };
 
 export class Refused extends Error {}
 
@@ -48,20 +51,6 @@ export class SpanWriter implements FieldWriter {
     const first = [...part.values].sort((a, b) => lowered.indexOf(a) - lowered.indexOf(b))[0]!;
     return this.surfaces.get(first) ?? first;
   }
-}
-
-export function isSearchField(field: { label: string; role?: string }): boolean {
-  return field.role === "searchbox" || /\bsearch\b/i.test(field.label);
-}
-
-/** The goal as a search query: without a leading "search (site) for" and the final period. */
-export function searchQuery(goal: string): string {
-  return goal
-    .trim()
-    .replace(/^(?:please\s+)?(?:search|look\s+up|google|find)(?:\s+\w+)?\s+for\s+/i, "")
-    .replace(/^(?:please\s+)?(?:search|look\s+up|google)\s+/i, "")
-    .replace(/[.!]+$/, "")
-    .trim();
 }
 
 // From gliner2-ultrafast questions.py (MIT).

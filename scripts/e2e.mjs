@@ -20,6 +20,7 @@ const TASKS = {
   walking: ["https://www.google.com/maps?hl=en", "Get directions from Berlin Hauptbahnhof to Brandenburg Gate. Select Walking."],
   newtab: ["chrome://newtab/", "Weather in Seattle"],
   local: ["http://localhost:5402/search.html", "weather seattle"],
+  stock: ["http://localhost:5402/search.html", "snowflake stock price"],
   wiki: ["https://en.wikipedia.org/wiki/Main_Page", "Search Wikipedia for the Golden Gate Bridge."],
 };
 const [url, goal] = TASKS[process.argv[2] ?? "flights"];

@@ -5,6 +5,7 @@
 // by side; tests/controller.test.ts checks the decisions match it.
 import { firstDate, sameDate, type IsoDate } from "./dates";
 import type { Action, HistoryEntry, Page } from "./types";
+import { isSearchField } from "./search";
 
 export type Labels = Record<string, string | undefined>;
 
@@ -385,6 +386,23 @@ async function suggestion(model: Scorer, ordered: Map<string, Group>, history: H
   return { requirement: null, score: confidence, group: options.get(picked)!, commits: true };
 }
 
+/**
+ * Zipline addition (not in the Python controller): a short goal that names no
+ * value ("snowflake stock price") matches no control above the 0.5 floor, so
+ * nothing is chosen and the run ends. When the page has an open search box and
+ * nothing has been typed yet, the goal goes into it as a query.
+ */
+function searchFallback(ordered: Map<string, Group>, history: HistoryEntry[], parts: Part[]): Chosen | null {
+  if (parts.length === 0 || parts.length > 2 || history.some((h) => h.kind === "fill")) return null;
+  for (const group of ordered.values()) {
+    const action = execute(group);
+    if (group.open && action.kind === "fill" && isSearchField({ label: action.label, role: action.role })) {
+      return { requirement: parts[parts.length - 1]!.text, score: 1.0, group };
+    }
+  }
+  return null;
+}
+
 function control(state: Page, name: string): Action | undefined {
   return state.actions.find((a) => a.id === name);
 }
@@ -412,6 +430,10 @@ export async function choose(
   const committing = await suggestion(model, ordered, history);
   chosen = committing ? [committing] : ((await dialog(model, ordered, chosen)) ?? chosen);
   const commits = Boolean(committing);
+  if (!chosen.length) {
+    const searching = searchFallback(ordered, history, parts);
+    if (searching) chosen = [searching];
+  }
 
   let choice: string, operation: string, confidence: number, requirement: string | null, covered: string[];
   if (chosen.length) {
