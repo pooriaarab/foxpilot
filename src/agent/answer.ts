@@ -109,7 +109,8 @@ async function pickRow(browser: TabBrowser, model: Scorer, goal: string): Promis
       price:
         parseMoney(found.price?.[0]?.text) ??
         parseMoney(block.text.match(/[$€£¥₹]\s?[\d,]+(?:\.\d+)?|[\d,]+(?:\.\d+)?\s?(?:US dollars|USD|dollars)/i)?.[0]),
-      depart: parseClock(found.time?.[0]?.text) ?? parseClock(block.text),
+      // Spans come ordered by confidence; the departure is the earliest time in the row.
+      depart: parseClock(earliest(found.time)?.text) ?? parseClock(block.text),
       // Durations have a fixed shape ("6 hr 14 min"); GLiNER's span can stop at "6 hr".
       duration: parseDuration(block.text.match(/\d+\s*h(?:r|ours?)?(?:\s*\d+\s*m(?:in)?)?|\d+\s*min\b/i)?.[0]) ?? parseDuration(found.duration?.[0]?.text),
       nonstop: /\b(nonstop|non-stop|direct)\b/i.test(block.text),
@@ -124,6 +125,10 @@ async function pickRow(browser: TabBrowser, model: Scorer, goal: string): Promis
   const label = describe(q, row);
   await browser.evaluate(HIGHLIGHT(row.i, `✦ ${label}`));
   return { text: row.text, score: 1, label };
+}
+
+function earliest<T extends { start?: number }>(spans: T[] | undefined): T | undefined {
+  return spans?.length ? [...spans].sort((a, b) => (a.start ?? 0) - (b.start ?? 0))[0] : undefined;
 }
 
 /** Rows read in the last pick, for debugging. */
