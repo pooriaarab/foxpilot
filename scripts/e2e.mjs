@@ -11,10 +11,12 @@ const TASKS = {
   flights: ["https://www.google.com/travel/flights?hl=en", "Find a one-way ticket from New York to San Francisco on October 9, 2026."],
   maps: ["https://www.google.com/maps?hl=en", "Get directions from Berlin Hauptbahnhof to Brandenburg Gate."],
   walking: ["https://www.google.com/maps?hl=en", "Get directions from Berlin Hauptbahnhof to Brandenburg Gate. Select Walking."],
+  newtab: ["chrome://newtab/", "Weather in Seattle"],
   wiki: ["https://en.wikipedia.org/wiki/Main_Page", "Search Wikipedia for the Golden Gate Bridge."],
 };
 const [url, goal] = TASKS[process.argv[2] ?? "flights"];
 const useLlm = process.argv.includes("--llm");
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const context = await chromium.launchPersistentContext(join(root, ".e2e-profile"), {
   headless: false,
@@ -26,7 +28,7 @@ const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent("servi
 const extensionId = new URL(worker.url()).host;
 
 const page = context.pages()[0] ?? (await context.newPage());
-await page.goto(url, { waitUntil: "domcontentloaded" });
+await page.goto(url, { waitUntil: "domcontentloaded" }).catch(() => {});
 await page.waitForTimeout(2500);
 const tabId = await worker.evaluate(async () => (await chrome.tabs.query({ active: true }))[0]?.id);
 
@@ -52,6 +54,8 @@ await panel.waitForFunction(() => !document.getElementById("result")?.hidden, nu
 const steps = await panel.locator("#steps li").allTextContents();
 for (const s of steps) console.log("  ", s.replace(/\s+/g, " ").trim());
 console.log("tab group:", await worker.evaluate(async (id) => { const t = await chrome.tabs.get(id); return t.groupId === -1 ? "(none)" : (await chrome.tabGroups.get(t.groupId)).title; }, tabId));
+await sleep(4500);
+console.log("tab group after 4.5 s:", await worker.evaluate(async (id) => (await chrome.tabs.get(id)).groupId === -1 ? "(ungrouped)" : "still grouped", tabId));
 console.log("result:", await panel.locator("#result").textContent(), "| clock:", await panel.locator("#elapsed").textContent());
 if (process.env.DUMP) {
   const { writeFileSync } = await import("node:fs");

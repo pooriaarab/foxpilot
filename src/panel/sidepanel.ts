@@ -48,6 +48,39 @@ function setModel(prefix: "gliner" | "llm", state: "idle" | "loading" | "ok" | "
   if (progress !== undefined) (bar.firstElementChild as HTMLElement).style.width = `${Math.round(progress * 100)}%`;
 }
 
+/** Where a run starts when the tab is a page Chrome won't let extensions drive (New Tab, settings…). */
+const START_PAGE = "https://www.google.com/";
+
+async function attachOrOpenStart(tabId: number): Promise<TabBrowser> {
+  try {
+    return await TabBrowser.attach(tabId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/chrome:\/\/|chrome-extension:\/\/|Cannot access|Cannot attach|edge:\/\//i.test(message)) throw error;
+    $("clock-sub").textContent = "This page can't be driven; opening google.com…";
+    await navigateAndWait(tabId, START_PAGE);
+    const browser = await TabBrowser.attach(tabId);
+    await browser.waitForLoad();
+    return browser;
+  }
+}
+
+function navigateAndWait(tabId: number, url: string): Promise<void> {
+  return new Promise((resolve) => {
+    const done = (id: number, change: { status?: string }) => {
+      if (id !== tabId || change.status !== "complete") return;
+      chrome.tabs.onUpdated.removeListener(done);
+      resolve();
+    };
+    chrome.tabs.onUpdated.addListener(done);
+    void chrome.tabs.update(tabId, { url });
+    setTimeout(() => {
+      chrome.tabs.onUpdated.removeListener(done);
+      resolve();
+    }, 15_000);
+  });
+}
+
 /** The tab to drive: ?tab=<id> when the panel is opened as a page (tests, recordings), else the active tab. */
 async function targetTab(): Promise<number | undefined> {
   const param = Number(new URLSearchParams(location.search).get("tab"));
@@ -192,7 +225,7 @@ async function run() {
     $("elapsed").textContent = `${((performance.now() - started) / 1000).toFixed(1)} s`;
   }, 100);
   try {
-    browser = await TabBrowser.attach(tabId);
+    browser = await attachOrOpenStart(tabId);
     const useLlm = llmToggle.checked && llm && llmReady;
     running = await Agent.create(
       gliner,
@@ -215,6 +248,7 @@ async function run() {
     result.textContent = `Error: ${error instanceof Error ? error.message : error}`;
     await status.failed();
   } finally {
+    status.finish();
     window.clearInterval(clock);
     running = null;
     await browser?.detach();

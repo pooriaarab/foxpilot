@@ -37,6 +37,9 @@ export class SpanWriter implements FieldWriter {
   ) {}
 
   async write(context: FieldContext): Promise<string> {
+    // A short goal typed into a search box is the query itself ("Weather in
+    // Seattle"), not just the value one part of it names ("Seattle").
+    if (isSearchField(context.field) && this.parts.length <= 2) return searchQuery(context.goal);
     const part = this.parts.find((p) => p.text === context.requirement);
     if (!part) throw new Refused("No requirement chose this field");
     if (part.date) return part.date;
@@ -45,6 +48,20 @@ export class SpanWriter implements FieldWriter {
     const first = [...part.values].sort((a, b) => lowered.indexOf(a) - lowered.indexOf(b))[0]!;
     return this.surfaces.get(first) ?? first;
   }
+}
+
+export function isSearchField(field: { label: string; role?: string }): boolean {
+  return field.role === "searchbox" || /\bsearch\b/i.test(field.label);
+}
+
+/** The goal as a search query: without a leading "search (site) for" and the final period. */
+export function searchQuery(goal: string): string {
+  return goal
+    .trim()
+    .replace(/^(?:please\s+)?(?:search|look\s+up|google|find)(?:\s+\w+)?\s+for\s+/i, "")
+    .replace(/^(?:please\s+)?(?:search|look\s+up|google)\s+/i, "")
+    .replace(/[.!]+$/, "")
+    .trim();
 }
 
 // From gliner2-ultrafast questions.py (MIT).
