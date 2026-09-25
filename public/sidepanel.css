@@ -386,3 +386,9 @@ textarea:focus {
   color: var(--accent);
   font-size: 12px;
 }
+
+.answer.note {
+  border-color: var(--line);
+  background: var(--panel);
+  color: var(--muted);
+}

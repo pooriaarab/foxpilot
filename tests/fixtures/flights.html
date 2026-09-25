@@ -38,7 +38,10 @@
       ];
       for (const [list, time, airline, duration, route, stops, via, price] of rows) {
         const li = document.createElement("li");
-        li.innerHTML = `<div>${time}<div class="muted">${airline}</div></div><div>${duration}<div class="muted">${route}</div></div><div>${stops}<div class="muted">${via}</div></div><div class="muted">CO2e</div><div class="price">$${price}</div>`;
+        // Screen-reader text like real results pages carry (visually hidden, still in innerText).
+        const [dep, arr] = time.split(" – ");
+        const sr = `<span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">From ${price} US dollars. ${stops === "Nonstop" ? "Nonstop" : "1 stop"} flight with ${airline}. Leaves ${route.split("–")[0]} airport at ${dep} on Friday, October 9 and arrives at ${route.split("–")[1]} airport at ${arr} on Friday, October 9. Total duration ${duration}. ${via ? "Layover (1 of 1) is a " + via + " layover." : ""} Carbon emissions estimate: 444 kilograms. Select flight.</span>`;
+        li.innerHTML = sr + `<div>${time}<div class="muted">${airline}</div></div><div>${duration}<div class="muted">${route}</div></div><div>${stops}<div class="muted">${via}</div></div><div class="muted">CO2e</div><div class="price">$${price}</div>`;
         document.getElementById(list).append(li);
       }
     </script>

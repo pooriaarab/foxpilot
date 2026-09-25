@@ -3,7 +3,7 @@
 import { env } from "@huggingface/transformers";
 import { Agent, type AgentView, type Step } from "../agent/agent";
 import { TabBrowser } from "../agent/browser";
-import { CLEAR, findAnswer, lastRows, lastScores } from "../agent/answer";
+import { CLEAR, findAnswer, lastNote, lastRows, lastScores } from "../agent/answer";
 import { LlmWriter, SpanWriter, type FieldWriter } from "../agent/fieldtext";
 import { Gliner2 } from "../model/gliner2";
 import { TabGroupStatus } from "./tabgroup";
@@ -215,6 +215,13 @@ function showAnswer(text: string, score: number, label?: string) {
   log.scrollTop = log.scrollHeight;
 }
 
+function showNote(text: string) {
+  const box = document.createElement("div");
+  box.className = "answer note";
+  box.append(Object.assign(document.createElement("span"), { textContent: text }));
+  $("result").after(box);
+}
+
 async function run() {
   if (running) {
     running.stop();
@@ -263,6 +270,7 @@ async function run() {
       (window as unknown as { __ziplineAnswer: unknown }).__ziplineAnswer = { answer, scores: lastScores, rows: lastRows };
       render(view);
       if (answer) showAnswer(answer.text, answer.score, answer.label);
+      else if (lastNote) showNote(lastNote);
     }
     $("elapsed").textContent = `${(view.elapsedMs / 1000).toFixed(1)} s`;
   } catch (error) {

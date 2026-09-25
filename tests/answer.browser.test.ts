@@ -40,7 +40,7 @@ describe.skipIf(!have)("answer highlight on fixtures", () => {
     expect(answer?.label).toBe("Cheapest morning option · $388");
     expect(await chip()).toBe("✦ Cheapest morning option · $388");
     if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
-    expect(lastRows.find((r) => r.text.startsWith("6:00 AM"))).toMatchObject({ price: 388, depart: 360, duration: 374 });
+    expect(lastRows.find((r) => r.text.includes("at 6:00 AM"))).toMatchObject({ price: 388, depart: 360, duration: 374 });
   }, 120_000);
 
   it("picks the cheapest overall without a time window", async () => {

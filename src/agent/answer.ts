@@ -80,11 +80,12 @@ const COLLECT_ROWS = `(() => {
   const money = /[$€£¥₹]\\s?\\d|\\d\\s?(USD|EUR|GBP)\\b/;
   const rows = [...document.querySelectorAll('li,[role="listitem"],[role="row"]')].filter(e => {
     const t = text(e);
-    return t.length >= 20 && t.length <= 600 && money.test(t) && e.checkVisibility({checkOpacity:true, checkVisibilityCSS:true});
+    // Rows can carry long screen-reader text ("Leaves … at 6:00 AM"), so allow up to 2000 chars.
+    return t.length >= 20 && t.length <= 2000 && money.test(t) && e.checkVisibility({checkOpacity:true, checkVisibilityCSS:true});
   });
   const inner = rows.filter(r => !rows.some(o => o !== r && r.contains(o))).slice(0, 40);
   window.__ziplineBlocks = inner;
-  return inner.map((e, i) => ({ i, text: text(e).slice(0, 400) }));
+  return inner.map((e, i) => ({ i, text: text(e).slice(0, 2000) }));
 })()`;
 
 const ROW_TYPES = {
@@ -101,11 +102,13 @@ async function pickRow(browser: TabBrowser, model: Scorer, goal: string): Promis
   if (!blocks?.length) return null;
   const rows: Row[] = [];
   for (const block of blocks) {
-    const found = await model.extractEntities(block.text, ROW_TYPES);
+    const found = await model.extractEntities(block.text.slice(0, 500), ROW_TYPES);
     rows.push({
       i: block.i,
       text: block.text,
-      price: parseMoney(found.price?.[0]?.text) ?? parseMoney(block.text.match(/[$€£¥₹]\s?[\d,]+(?:\.\d+)?/)?.[0]),
+      price:
+        parseMoney(found.price?.[0]?.text) ??
+        parseMoney(block.text.match(/[$€£¥₹]\s?[\d,]+(?:\.\d+)?|[\d,]+(?:\.\d+)?\s?(?:US dollars|USD|dollars)/i)?.[0]),
       depart: parseClock(found.time?.[0]?.text) ?? parseClock(block.text),
       // Durations have a fixed shape ("6 hr 14 min"); GLiNER's span can stop at "6 hr".
       duration: parseDuration(block.text.match(/\d+\s*h(?:r|ours?)?(?:\s*\d+\s*m(?:in)?)?|\d+\s*min\b/i)?.[0]) ?? parseDuration(found.duration?.[0]?.text),
@@ -114,7 +117,10 @@ async function pickRow(browser: TabBrowser, model: Scorer, goal: string): Promis
   }
   lastRows = rows;
   const row = choose(rows, q);
-  if (!row) return null;
+  if (!row) {
+    lastNote = explain(rows, q);
+    return null;
+  }
   const label = describe(q, row);
   await browser.evaluate(HIGHLIGHT(row.i, `✦ ${label}`));
   return { text: row.text, score: 1, label };
@@ -122,8 +128,24 @@ async function pickRow(browser: TabBrowser, model: Scorer, goal: string): Promis
 
 /** Rows read in the last pick, for debugging. */
 export let lastRows: Row[] = [];
+/** Why the last pick found nothing, shown in the panel. */
+export let lastNote = "";
+
+function explain(rows: Row[], q: NonNullable<ReturnType<typeof qualifiers>>): string {
+  if (!rows.length) return "No result rows with a price on this page.";
+  const parts = [`${rows.length} result rows read`];
+  const withTime = rows.filter((r) => r.depart !== undefined).length;
+  if (q.window) parts.push(`${rows.filter((r) => r.depart !== undefined && inWindowOf(r.depart, q.window!)).length} of ${withTime} with a time are in the ${q.windowName}`);
+  if (q.nonstop) parts.push(`${rows.filter((r) => r.nonstop).length} nonstop`);
+  return `No row matched: ${parts.join(" · ")}.`;
+}
+
+function inWindowOf(minutes: number, [start, end]: [number, number]): boolean {
+  return start <= end ? minutes >= start && minutes < end : minutes >= start || minutes < end;
+}
 
 export async function findAnswer(browser: TabBrowser, model: Scorer, goal: string): Promise<Answer | null> {
+  lastNote = "";
   const picked = await pickRow(browser, model, goal);
   if (picked) return picked;
   const blocks = await browser.evaluate<{ i: number; text: string }[]>(COLLECT);
