@@ -1,0 +1,5 @@
+.venv/
+dist-model/
+node_modules/
+dist/
+bench/bench.js

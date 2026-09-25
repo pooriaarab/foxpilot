@@ -1,0 +1,22 @@
+{
+  "name": "ultrafast-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A browser agent that runs GLiNER2 (and optionally a small LLM) entirely in Chrome on WebGPU",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@huggingface/transformers": "^4.3.0"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.3.0",
+    "@types/node": "^26.6.2",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1"
+  }
+}
