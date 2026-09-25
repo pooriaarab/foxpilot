@@ -1,0 +1,889 @@
+{
+ "goal": "Get directions from Berlin Hauptbahnhof to Brandenburg Gate. Select Walking.",
+ "state": {
+  "url": "https://www.google.com/maps?hl=en",
+  "title": "Google Maps",
+  "w": 1120,
+  "h": 780,
+  "text": "Search Google Maps\nSaved\nRecents\nGet app\nSign in\nLayers\nMap data ©2026 Google\nUnited States\nTerms\nPrivacy\nSend Product Feedback\n2000 ft",
+  "scroll": {
+   "y": 0,
+   "height": 780
+  },
+  "actions": [
+   {
+    "node": 1,
+    "role": "combobox",
+    "label": "Search Google Maps",
+    "section": "search form",
+    "rect": {
+     "x": 112,
+     "y": 23,
+     "w": 246,
+     "h": 24
+    },
+    "document_id": 1790376559599,
+    "form": 2,
+    "expanded": "false",
+    "kind": "fill",
+    "value": "",
+    "id": "e1"
+   },
+   {
+    "node": 1,
+    "role": "combobox",
+    "label": "Open Search Google Maps",
+    "section": "search form",
+    "rect": {
+     "x": 112,
+     "y": 23,
+     "w": 246,
+     "h": 24
+    },
+    "document_id": 1790376559599,
+    "form": 2,
+    "expanded": "false",
+    "kind": "click",
+    "value": "",
+    "id": "e2"
+   },
+   {
+    "node": 3,
+    "role": "button",
+    "label": "Search",
+    "section": "search",
+    "rect": {
+     "x": 362,
+     "y": 12,
+     "w": 48,
+     "h": 52
+    },
+    "document_id": 1790376559599,
+    "form": 4,
+    "kind": "click",
+    "value": "",
+    "id": "e3"
+   },
+   {
+    "node": 5,
+    "role": "button",
+    "label": "Directions",
+    "section": "search",
+    "rect": {
+     "x": 410,
+     "y": 12,
+     "w": 54,
+     "h": 48
+    },
+    "document_id": 1790376559599,
+    "form": 4,
+    "kind": "click",
+    "value": "",
+    "id": "e4"
+   },
+   {
+    "node": 6,
+    "role": "button",
+    "label": "Menu",
+    "section": "Google Maps",
+    "rect": {
+     "x": 0,
+     "y": 16,
+     "w": 72,
+     "h": 36
+    },
+    "document_id": 1790376559599,
+    "kind": "click",
+    "value": "",
+    "id": "e5"
+   },
+   {
+    "node": 7,
+    "role": "button",
+    "label": "Saved",
+    "section": "Google Maps",
+    "rect": {
+     "x": 0,
+     "y": 68,
+     "w": 72,
+     "h": 64
+    },
+    "document_id": 1790376559599,
+    "kind": "click",
+    "value": "",
+    "id": "e6"
+   },
+   {
+    "node": 8,
+    "role": "button",
+    "label": "Get app",
+    "section": "Google Maps",
+    "rect": {
+     "x": 0,
+     "y": 708,
+     "w": 72,
+     "h": 56
+    },
+    "document_id": 1790376559599,
+    "kind": "click",
+    "value": "",
+    "id": "e7"
+   },
+   {
+    "node": 9,
+    "role": "button",
+    "label": "Google apps",
+    "section": "Google Maps",
+    "rect": {
+     "x": 953,
+     "y": 12.0625,
+     "w": 40,
+     "h": 40
+    },
+    "document_id": 1790376559599,
+    "expanded": "false",
+    "kind": "click",
+    "value": "",
+    "id": "e8"
+   },
+   {
+    "node": 10,
+    "role": "link",
+    "label": "Sign in",
+    "section": "Google Maps",
+    "rect": {
+     "x": 1007,
+     "y": 12,
+     "w": 85,
+     "h": 40
+    },
+    "document_id": 1790376559599,
+    "kind": "click",
+    "value": "",
+    "id": "e9"
+   },
+   {
+    "node": 11,
+    "role": "button",
+    "label": "Show Your Location",
+    "section": "Google Maps",
+    "rect": {
+     "x": 1071,
+     "y": 638,
+     "w": 29,
+     "h": 29
+    },
+    "document_id": 1790376559599,
+    "kind": "click",
+    "value": "",
+    "id": "e10"
+   },
+   {
+    "node": 12,
+    "role": "button",
+    "label": "Zoom in",
+    "section": "Google Maps",
+    "rect": {
+     "x": 1071,
+     "y": 670,
+     "w": 29,
+     "h": 29
+    },
+    "document_id": 1790376559599,
+    "kind": "click",
+    "value": "",
+    "id": "e11"
+   },
+   {
+    "node": 13,
+    "role": "button",
+    "label": "Zoom out",
+    "section": "Google Maps",
+    "rect": {
+     "x": 1071,
+     "y": 698,
+     "w": 29,
+     "h": 29
+    },
+    "document_id": 1790376559599,
+    "kind": "click",
+    "value": "",
+    "id": "e12"
+   },
+   {
+    "node": 14,
+    "role": "button",
+    "label": "Browse Street View images",
+    "section": "Google Maps",
+    "rect": {
+     "x": 956,
+     "y": 730,
+     "w": 30,
+     "h": 30
+    },
+    "document_id": 1790376559599,
+    "kind": "click",
+    "value": "",
+    "id": "e13"
+   },
+   {
+    "node": 15,
+    "role": "button",
+    "label": "Show imagery",
+    "section": "Google Maps",
+    "rect": {
+     "x": 987,
+     "y": 730,
+     "w": 113,
+     "h": 30
+    },
+    "document_id": 1790376559599,
+    "kind": "click",
+    "value": "",
+    "id": "e14"
+   },
+   {
+    "node": 16,
+    "role": "button",
+    "label": "Layers",
+    "section": "Google Maps",
+    "rect": {
+     "x": 94,
+     "y": 683,
+     "w": 75,
+     "h": 75
+    },
+    "document_id": 1790376559599,
+    "expanded": "false",
+    "kind": "click",
+    "value": "",
+    "id": "e15"
+   },
+   {
+    "node": 17,
+    "role": "button",
+    "label": "United States",
+    "section": "contentinfo",
+    "rect": {
+     "x": 681.6875,
+     "y": 767,
+     "w": 59.46875,
+     "h": 13
+    },
+    "document_id": 1790376559599,
+    "kind": "click",
+    "value": "",
+    "id": "e16"
+   },
+   {
+    "node": 18,
+    "role": "button",
+    "label": "Terms",
+    "section": "contentinfo",
+    "rect": {
+     "x": 756.15625,
+     "y": 767,
+     "w": 28.0859375,
+     "h": 13
+    },
+    "document_id": 1790376559599,
+    "kind": "click",
+    "value": "",
+    "id": "e17"
+   },
+   {
+    "node": 19,
+    "role": "button",
+    "label": "Privacy",
+    "section": "contentinfo",
+    "rect": {
+     "x": 799.2421875,
+     "y": 767,
+     "w": 32.296875,
+     "h": 13
+    },
+    "document_id": 1790376559599,
+    "kind": "click",
+    "value": "",
+    "id": "e18"
+   },
+   {
+    "node": 20,
+    "role": "button",
+    "label": "Send Product Feedback",
+    "section": "contentinfo",
+    "rect": {
+     "x": 846.5390625,
+     "y": 767,
+     "w": 105.3046875,
+     "h": 13
+    },
+    "document_id": 1790376559599,
+    "kind": "click",
+    "value": "",
+    "id": "e19"
+   },
+   {
+    "node": 21,
+    "role": "button",
+    "label": "2000 ft",
+    "section": "Google Maps",
+    "rect": {
+     "x": 966.84375,
+     "y": 767.5,
+     "w": 132.15625,
+     "h": 12
+    },
+    "document_id": 1790376559599,
+    "kind": "click",
+    "value": "",
+    "id": "e20"
+   },
+   {
+    "id": "press_enter",
+    "kind": "key",
+    "label": "Press Enter to submit the focused field"
+   },
+   {
+    "id": "wait",
+    "kind": "wait",
+    "label": "Wait for the page to update"
+   }
+  ],
+  "marker": [
+   1790376559599,
+   "https://www.google.com/maps?hl=en",
+   0,
+   0,
+   1120,
+   780,
+   "Google Maps",
+   "Search Google Maps\nSaved\nRecents\nGet app\nSign in\nLayers\nMap data ©2026 Google\nUnited States\nTerms\nPrivacy\nSend Product Feedback\n2000 ft",
+   [
+    {
+     "node": 1,
+     "role": "combobox",
+     "label": "Search Google Maps",
+     "section": "search form",
+     "document_id": 1790376559599,
+     "form": 2,
+     "expanded": "false",
+     "kind": "fill",
+     "value": ""
+    },
+    {
+     "node": 1,
+     "role": "combobox",
+     "label": "Open Search Google Maps",
+     "section": "search form",
+     "document_id": 1790376559599,
+     "form": 2,
+     "expanded": "false",
+     "kind": "click",
+     "value": ""
+    },
+    {
+     "node": 3,
+     "role": "button",
+     "label": "Search",
+     "section": "search",
+     "document_id": 1790376559599,
+     "form": 4,
+     "kind": "click",
+     "value": ""
+    },
+    {
+     "node": 5,
+     "role": "button",
+     "label": "Directions",
+     "section": "search",
+     "document_id": 1790376559599,
+     "form": 4,
+     "kind": "click",
+     "value": ""
+    },
+    {
+     "node": 6,
+     "role": "button",
+     "label": "Menu",
+     "section": "Google Maps",
+     "document_id": 1790376559599,
+     "kind": "click",
+     "value": ""
+    },
+    {
+     "node": 7,
+     "role": "button",
+     "label": "Saved",
+     "section": "Google Maps",
+     "document_id": 1790376559599,
+     "kind": "click",
+     "value": ""
+    },
+    {
+     "node": 8,
+     "role": "button",
+     "label": "Get app",
+     "section": "Google Maps",
+     "document_id": 1790376559599,
+     "kind": "click",
+     "value": ""
+    },
+    {
+     "node": 9,
+     "role": "button",
+     "label": "Google apps",
+     "section": "Google Maps",
+     "document_id": 1790376559599,
+     "expanded": "false",
+     "kind": "click",
+     "value": ""
+    },
+    {
+     "node": 10,
+     "role": "link",
+     "label": "Sign in",
+     "section": "Google Maps",
+     "document_id": 1790376559599,
+     "kind": "click",
+     "value": ""
+    },
+    {
+     "node": 11,
+     "role": "button",
+     "label": "Show Your Location",
+     "section": "Google Maps",
+     "document_id": 1790376559599,
+     "kind": "click",
+     "value": ""
+    },
+    {
+     "node": 12,
+     "role": "button",
+     "label": "Zoom in",
+     "section": "Google Maps",
+     "document_id": 1790376559599,
+     "kind": "click",
+     "value": ""
+    },
+    {
+     "node": 13,
+     "role": "button",
+     "label": "Zoom out",
+     "section": "Google Maps",
+     "document_id": 1790376559599,
+     "kind": "click",
+     "value": ""
+    },
+    {
+     "node": 14,
+     "role": "button",
+     "label": "Browse Street View images",
+     "section": "Google Maps",
+     "document_id": 1790376559599,
+     "kind": "click",
+     "value": ""
+    },
+    {
+     "node": 15,
+     "role": "button",
+     "label": "Show imagery",
+     "section": "Google Maps",
+     "document_id": 1790376559599,
+     "kind": "click",
+     "value": ""
+    },
+    {
+     "node": 16,
+     "role": "button",
+     "label": "Layers",
+     "section": "Google Maps",
+     "document_id": 1790376559599,
+     "expanded": "false",
+     "kind": "click",
+     "value": ""
+    },
+    {
+     "node": 17,
+     "role": "button",
+     "label": "United States",
+     "section": "contentinfo",
+     "document_id": 1790376559599,
+     "kind": "click",
+     "value": ""
+    },
+    {
+     "node": 18,
+     "role": "button",
+     "label": "Terms",
+     "section": "contentinfo",
+     "document_id": 1790376559599,
+     "kind": "click",
+     "value": ""
+    },
+    {
+     "node": 19,
+     "role": "button",
+     "label": "Privacy",
+     "section": "contentinfo",
+     "document_id": 1790376559599,
+     "kind": "click",
+     "value": ""
+    },
+    {
+     "node": 20,
+     "role": "button",
+     "label": "Send Product Feedback",
+     "section": "contentinfo",
+     "document_id": 1790376559599,
+     "kind": "click",
+     "value": ""
+    },
+    {
+     "node": 21,
+     "role": "button",
+     "label": "2000 ft",
+     "section": "Google Maps",
+     "document_id": 1790376559599,
+     "kind": "click",
+     "value": ""
+    }
+   ],
+   [
+    [
+     1,
+     "",
+     false,
+     null,
+     false,
+     false
+    ]
+   ]
+  ],
+  "page_key": [
+   1790376559599,
+   "https://www.google.com/maps?hl=en",
+   0,
+   0,
+   1120,
+   780,
+   [
+    [
+     1,
+     "",
+     false,
+     null,
+     false,
+     false
+    ]
+   ]
+  ],
+  "guards": {
+   "1": [
+    1,
+    "combobox",
+    "Search Google Maps",
+    "",
+    false,
+    null,
+    false,
+    false,
+    null,
+    "false",
+    null,
+    null,
+    null,
+    "Search Google Maps"
+   ],
+   "3": [
+    3,
+    "button",
+    "Search",
+    "",
+    null,
+    null,
+    null,
+    false,
+    null,
+    null,
+    null,
+    null,
+    null,
+    ""
+   ],
+   "5": [
+    5,
+    "button",
+    "Directions",
+    "",
+    null,
+    null,
+    null,
+    false,
+    null,
+    null,
+    null,
+    null,
+    null,
+    ""
+   ],
+   "6": [
+    6,
+    "button",
+    "Menu",
+    "",
+    null,
+    null,
+    null,
+    false,
+    null,
+    null,
+    null,
+    null,
+    null,
+    ""
+   ],
+   "7": [
+    7,
+    "button",
+    "Saved",
+    "",
+    null,
+    null,
+    null,
+    false,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "\nSaved"
+   ],
+   "8": [
+    8,
+    "button",
+    "Get app",
+    "",
+    null,
+    null,
+    null,
+    false,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "\nGet app"
+   ],
+   "9": [
+    9,
+    "button",
+    "Google apps",
+    null,
+    null,
+    null,
+    null,
+    false,
+    null,
+    "false",
+    null,
+    null,
+    "https://www.google.com/intl/en/about/products?tab=lh",
+    ""
+   ],
+   "10": [
+    10,
+    "link",
+    "Sign in",
+    null,
+    null,
+    null,
+    null,
+    false,
+    null,
+    null,
+    null,
+    null,
+    "https://accounts.google.com/ServiceLogin?hl=en&passive=true&continue=https://www.google.com/maps%3Fhl%3Den&service=local&ec=GAZAcQ",
+    "Sign in"
+   ],
+   "11": [
+    11,
+    "button",
+    "Show Your Location",
+    "",
+    null,
+    null,
+    null,
+    false,
+    null,
+    null,
+    null,
+    null,
+    null,
+    ""
+   ],
+   "12": [
+    12,
+    "button",
+    "Zoom in",
+    "",
+    null,
+    null,
+    null,
+    false,
+    null,
+    null,
+    null,
+    null,
+    null,
+    ""
+   ],
+   "13": [
+    13,
+    "button",
+    "Zoom out",
+    "",
+    null,
+    null,
+    null,
+    false,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "\n"
+   ],
+   "14": [
+    14,
+    "button",
+    "Browse Street View images",
+    "",
+    null,
+    null,
+    null,
+    false,
+    null,
+    null,
+    null,
+    null,
+    null,
+    ""
+   ],
+   "15": [
+    15,
+    "button",
+    "Show imagery",
+    "",
+    null,
+    null,
+    null,
+    false,
+    null,
+    null,
+    null,
+    null,
+    null,
+    ""
+   ],
+   "16": [
+    16,
+    "button",
+    "Layers",
+    "",
+    null,
+    null,
+    null,
+    false,
+    null,
+    "false",
+    null,
+    null,
+    null,
+    " Layers"
+   ],
+   "17": [
+    17,
+    "button",
+    "United States",
+    "",
+    null,
+    null,
+    null,
+    false,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "Map data ©2026 GoogleUnited StatesTermsPrivacySend Product Feedback"
+   ],
+   "18": [
+    18,
+    "button",
+    "Terms",
+    "",
+    null,
+    null,
+    null,
+    false,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "Map data ©2026 GoogleUnited StatesTermsPrivacySend Product Feedback"
+   ],
+   "19": [
+    19,
+    "button",
+    "Privacy",
+    "",
+    null,
+    null,
+    null,
+    false,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "Map data ©2026 GoogleUnited StatesTermsPrivacySend Product Feedback"
+   ],
+   "20": [
+    20,
+    "button",
+    "Send Product Feedback",
+    "",
+    null,
+    null,
+    null,
+    false,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "Map data ©2026 GoogleUnited StatesTermsPrivacySend Product Feedback"
+   ],
+   "21": [
+    21,
+    "button",
+    "2000 ft",
+    "",
+    null,
+    null,
+    null,
+    false,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "2000 ft "
+   ]
+  },
+  "omitted_actions": 0
+ }
+}

@@ -1,0 +1,233 @@
+[
+ {
+  "name": "flights-start",
+  "goal": "Find a one-way ticket from New York to San Francisco on October 9, 2026.",
+  "history": [],
+  "parts": [
+   {
+    "text": "Find a one-way ticket",
+    "values": [],
+    "date": null
+   },
+   {
+    "text": "from New York",
+    "values": [
+     "new york"
+    ],
+    "date": null
+   },
+   {
+    "text": "to San Francisco",
+    "values": [
+     "san francisco"
+    ],
+    "date": null
+   },
+   {
+    "text": "on October 9, 2026",
+    "values": [
+     "october 9, 2026"
+    ],
+    "date": "2026-10-09"
+   }
+  ],
+  "decision": {
+   "choice": "e12",
+   "operation": "CLICK",
+   "target": "Change ticket type. Round trip",
+   "requirement": "Find a one-way ticket",
+   "covered": [
+    "Find a one-way ticket"
+   ],
+   "commits": false,
+   "date": null,
+   "confidence": 0.865158828975601,
+   "raw_answers": {
+    "Find a one-way ticket": {
+     "Change ticket type. Round trip": 0.865158828975601,
+     "Departure": 0.042782750104020766,
+     "Flights": 0.024710038711056266,
+     "1 passenger, change number of passengers.": 0.020235339437395135,
+     "Return": 0.01786469337347613,
+     "Skip to main content": 0.007697509939389413,
+     "Explore": 0.003935081909818238,
+     "Change seating class. Economy": 0.0031495864415704814
+    },
+    "from New York": {
+     "Departure": 0.863863437389544,
+     "Where from?": 0.13432515791929903,
+     "Where to?": 0.001012729086117569,
+     "Return": 0.0007986756050393823
+    },
+    "to San Francisco": {
+     "Where to?": 0.7274039198423388,
+     "Departure": 0.22400645278460063,
+     "Return": 0.04513504140817633,
+     "Where from?": 0.003454585964884267
+    },
+    "on October 9, 2026": {
+     "Departure": 0.713902420427389,
+     "Return": 0.197777020010139,
+     "Where from?": 0.05534298478058861,
+     "Where to?": 0.03297757478188343
+    }
+   }
+  }
+ },
+ {
+  "name": "flights-typed-origin",
+  "goal": "Find a one-way ticket from New York to San Francisco on October 9, 2026.",
+  "history": [
+   {
+    "action": "Where from?",
+    "node": 16,
+    "document_id": 1790376554150.9,
+    "requirement": "from New York",
+    "kind": "fill",
+    "form": 13,
+    "submit": false,
+    "committed_field": null,
+    "text": "New York"
+   }
+  ],
+  "parts": [
+   {
+    "text": "Find a one-way ticket",
+    "values": [],
+    "date": null
+   },
+   {
+    "text": "from New York",
+    "values": [
+     "new york"
+    ],
+    "date": null
+   },
+   {
+    "text": "to San Francisco",
+    "values": [
+     "san francisco"
+    ],
+    "date": null
+   },
+   {
+    "text": "on October 9, 2026",
+    "values": [
+     "october 9, 2026"
+    ],
+    "date": "2026-10-09"
+   }
+  ],
+  "decision": {
+   "choice": "e4",
+   "operation": "CLICK",
+   "target": "New York",
+   "requirement": null,
+   "covered": [
+    "from New York"
+   ],
+   "commits": true,
+   "date": null,
+   "confidence": 0.8711450954211339,
+   "raw_answers": {
+    "Find a one-way ticket": {
+     "Origin, Select multiple airports": 0.8882902380316924,
+     "New York": 0.0469624257404042,
+     "Where else?": 0.017404707453704326,
+     "Buffalo, New York": 0.014923417781352743,
+     "John F. Kennedy International Airport JFK": 0.009584469184118776,
+     "LaGuardia Airport LGA": 0.0072504850679564825,
+     "Newark Liberty International Airport EWR": 0.007022942373765511,
+     "Where from?": 0.005351515792073198
+    },
+    "from New York": {
+     "New York": 0.9930690400623609,
+     "Where from?": 0.006812585456836167,
+     "Where else?": 4.789525848219189e-05,
+     "Buffalo, New York": 3.658449431778725e-05,
+     "Origin, Select multiple airports": 1.3001196691093256e-05,
+     "Toggle nearby airports for New York": 8.327759382527487e-06,
+     "LaGuardia Airport LGA": 5.497314700663076e-06,
+     "John F. Kennedy International Airport JFK": 3.1956719791616874e-06
+    },
+    "to San Francisco": {
+     "Where else?": 1.0
+    },
+    "on October 9, 2026": {
+     "Where else?": 1.0
+    }
+   }
+  }
+ },
+ {
+  "name": "maps-start",
+  "goal": "Get directions from Berlin Hauptbahnhof to Brandenburg Gate. Select Walking.",
+  "history": [],
+  "parts": [
+   {
+    "text": "Get directions",
+    "values": [],
+    "date": null
+   },
+   {
+    "text": "from Berlin Hauptbahnhof",
+    "values": [
+     "berlin hauptbahnhof"
+    ],
+    "date": null
+   },
+   {
+    "text": "to Brandenburg Gate",
+    "values": [
+     "brandenburg gate"
+    ],
+    "date": null
+   },
+   {
+    "text": "Select Walking",
+    "values": [],
+    "date": null
+   }
+  ],
+  "decision": {
+   "choice": "e4",
+   "operation": "CLICK",
+   "target": "Directions",
+   "requirement": "Get directions",
+   "covered": [
+    "Get directions"
+   ],
+   "commits": false,
+   "date": null,
+   "confidence": 0.9999926526617214,
+   "raw_answers": {
+    "Get directions": {
+     "Directions": 0.9999926526617214,
+     "Search": 1.3012828387397994e-06,
+     "United States": 9.065170913479768e-07,
+     "Show Your Location": 7.282846959055956e-07,
+     "Google apps": 5.542003892181613e-07,
+     "Search Google Maps": 4.865252275098552e-07,
+     "Menu": 3.581740744479451e-07,
+     "Get app": 3.470251225879066e-07
+    },
+    "from Berlin Hauptbahnhof": {
+     "Search Google Maps": 1.0
+    },
+    "to Brandenburg Gate": {
+     "Search Google Maps": 1.0
+    },
+    "Select Walking": {
+     "Directions": 0.7784514971469335,
+     "Search": 0.1547405694960164,
+     "Show Your Location": 0.014513605407974197,
+     "Terms": 0.01264437417569877,
+     "Menu": 0.012338458317727336,
+     "Search Google Maps": 0.006363717095543626,
+     "Sign in": 0.004770974396196754,
+     "Layers": 0.003200524922288896
+    }
+   }
+  }
+ }
+]

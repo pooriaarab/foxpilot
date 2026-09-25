@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Zipline</title>
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <header>
+      <img src="icons/icon-48.png" alt="" width="28" height="28" />
+      <div>
+        <h1>Zipline</h1>
+        <p class="sub">A browser agent that runs entirely on your device</p>
+      </div>
+    </header>
+
+    <section class="models">
+      <div class="model">
+        <span class="dot" id="gliner-dot"></span>
+        <div class="model-text">
+          <strong>GLiNER2 · decisions</strong>
+          <span id="gliner-status">Loading…</span>
+        </div>
+      </div>
+      <div class="progress" id="gliner-progress"><div></div></div>
+      <label class="model toggle">
+        <span class="dot" id="llm-dot"></span>
+        <div class="model-text">
+          <strong>Local LLM · field text</strong>
+          <span id="llm-status">Off: types the values GLiNER finds in your goal</span>
+        </div>
+        <span class="switch"><input type="checkbox" id="llm-toggle" /><span></span></span>
+      </label>
+      <div class="progress" id="llm-progress" hidden><div></div></div>
+    </section>
+
+    <section class="task">
+      <label for="goal">Goal for the current tab</label>
+      <textarea id="goal" rows="3" placeholder="Find a one-way ticket from New York to San Francisco on October 9, 2026."></textarea>
+      <div class="examples" id="examples"></div>
+      <div class="run-row">
+        <button id="run" type="button" disabled>Run</button>
+        <div class="clock">
+          <span id="elapsed">0.0 s</span>
+          <span class="clock-sub" id="clock-sub">ready</span>
+        </div>
+      </div>
+      <p class="note">Zipline drives the tab through Chrome's debugger, so Chrome shows a "started debugging this browser" bar while it runs.</p>
+    </section>
+
+    <section class="log">
+      <ol id="steps"></ol>
+      <p id="result" class="result" hidden></p>
+    </section>
+
+    <script type="module" src="sidepanel.js"></script>
+  </body>
+</html>

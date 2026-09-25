@@ -1,0 +1,537 @@
+{
+ "goal": "Find a one-way ticket from New York to San Francisco on October 9, 2026.",
+ "state": {
+  "url": "https://www.google.com/travel/flights?hl=en",
+  "title": "Find Cheap Flights Worldwide & Book Your Ticket - Google Flights",
+  "w": 1120,
+  "h": 780,
+  "text": "New York\nCity in New York State\nJohn F. Kennedy International Airport\nJFK\n12 mi to destination\nLaGuardia Airport\nLGA\n8 mi to destination\nNewark Liberty International Airport\nEWR\n8 mi to destination\nBuffalo, New York\nCity in New York State\nNiagara Falls, New York",
+  "scroll": {
+   "y": 0,
+   "height": 3034
+  },
+  "actions": [
+   {
+    "node": 27,
+    "role": "combobox",
+    "label": "Where else?",
+    "section": "Enter your origin dialog",
+    "rect": {
+     "x": 132,
+     "y": 438.90625,
+     "w": 344,
+     "h": 48
+    },
+    "document_id": 1790376554150.9,
+    "form": 13,
+    "dialog": true,
+    "expanded": "true",
+    "kind": "fill",
+    "value": "New York",
+    "id": "e1"
+   },
+   {
+    "node": 27,
+    "role": "combobox",
+    "label": "Open Where else?",
+    "section": "Enter your origin dialog",
+    "rect": {
+     "x": 132,
+     "y": 438.90625,
+     "w": 344,
+     "h": 48
+    },
+    "document_id": 1790376554150.9,
+    "form": 13,
+    "dialog": true,
+    "expanded": "true",
+    "kind": "click",
+    "value": "New York",
+    "id": "e2"
+   },
+   {
+    "node": 28,
+    "role": "button",
+    "label": "Origin, Select multiple airports",
+    "section": "Enter your origin dialog",
+    "rect": {
+     "x": 476,
+     "y": 438.90625,
+     "w": 48,
+     "h": 48
+    },
+    "document_id": 1790376554150.9,
+    "form": 13,
+    "dialog": true,
+    "kind": "click",
+    "value": "",
+    "id": "e3"
+   },
+   {
+    "node": 29,
+    "role": "option",
+    "label": "New York",
+    "section": "listbox",
+    "rect": {
+     "x": 80,
+     "y": 495.90625,
+     "w": 448,
+     "h": 48
+    },
+    "document_id": 1790376554150.9,
+    "suggestion_for": 27,
+    "form": 13,
+    "dialog": true,
+    "selected": "false",
+    "kind": "click",
+    "value": "0",
+    "id": "e4"
+   },
+   {
+    "node": 30,
+    "role": "button",
+    "label": "Toggle nearby airports for New York",
+    "section": "listbox",
+    "rect": {
+     "x": 476,
+     "y": 495.90625,
+     "w": 48,
+     "h": 48
+    },
+    "document_id": 1790376554150.9,
+    "form": 13,
+    "dialog": true,
+    "expanded": "true",
+    "kind": "click",
+    "value": "",
+    "id": "e5"
+   },
+   {
+    "node": 31,
+    "role": "option",
+    "label": "John F. Kennedy International Airport (JFK)",
+    "section": "listbox",
+    "rect": {
+     "x": 80,
+     "y": 543.90625,
+     "w": 448,
+     "h": 56
+    },
+    "document_id": 1790376554150.9,
+    "suggestion_for": 27,
+    "form": 13,
+    "dialog": true,
+    "selected": "false",
+    "kind": "click",
+    "value": "0",
+    "id": "e6"
+   },
+   {
+    "node": 32,
+    "role": "option",
+    "label": "LaGuardia Airport (LGA)",
+    "section": "listbox",
+    "rect": {
+     "x": 80,
+     "y": 599.90625,
+     "w": 448,
+     "h": 56
+    },
+    "document_id": 1790376554150.9,
+    "suggestion_for": 27,
+    "form": 13,
+    "dialog": true,
+    "selected": "false",
+    "kind": "click",
+    "value": "0",
+    "id": "e7"
+   },
+   {
+    "node": 33,
+    "role": "option",
+    "label": "Newark Liberty International Airport (EWR)",
+    "section": "listbox",
+    "rect": {
+     "x": 80,
+     "y": 655.90625,
+     "w": 448,
+     "h": 56
+    },
+    "document_id": 1790376554150.9,
+    "suggestion_for": 27,
+    "form": 13,
+    "dialog": true,
+    "selected": "false",
+    "kind": "click",
+    "value": "0",
+    "id": "e8"
+   },
+   {
+    "node": 34,
+    "role": "option",
+    "label": "Buffalo, New York",
+    "section": "listbox",
+    "rect": {
+     "x": 80,
+     "y": 711.90625,
+     "w": 448,
+     "h": 48
+    },
+    "document_id": 1790376554150.9,
+    "suggestion_for": 27,
+    "form": 13,
+    "dialog": true,
+    "selected": "false",
+    "kind": "click",
+    "value": "0",
+    "id": "e9"
+   },
+   {
+    "node": 35,
+    "role": "button",
+    "label": "Toggle nearby airports for Buffalo, New York",
+    "section": "listbox",
+    "rect": {
+     "x": 476,
+     "y": 711.90625,
+     "w": 48,
+     "h": 48
+    },
+    "document_id": 1790376554150.9,
+    "form": 13,
+    "dialog": true,
+    "expanded": "false",
+    "kind": "click",
+    "value": "",
+    "id": "e10"
+   },
+   {
+    "id": "scroll_down",
+    "kind": "scroll",
+    "label": "Scroll down",
+    "delta": 560
+   },
+   {
+    "id": "press_enter",
+    "kind": "key",
+    "label": "Press Enter to submit the focused field"
+   },
+   {
+    "id": "wait",
+    "kind": "wait",
+    "label": "Wait for the page to update"
+   }
+  ],
+  "marker": [
+   1790376554150.9,
+   "https://www.google.com/travel/flights?hl=en",
+   0,
+   0,
+   1120,
+   780,
+   "Find Cheap Flights Worldwide & Book Your Ticket - Google Flights",
+   "New York\nCity in New York State\nJohn F. Kennedy International Airport\nJFK\n12 mi to destination\nLaGuardia Airport\nLGA\n8 mi to destination\nNewark Liberty International Airport\nEWR\n8 mi to destination\nBuffalo, New York\nCity in New York State\nNiagara Falls, New York",
+   [
+    {
+     "node": 27,
+     "role": "combobox",
+     "label": "Where else?",
+     "section": "Enter your origin dialog",
+     "document_id": 1790376554150.9,
+     "form": 13,
+     "dialog": true,
+     "expanded": "true",
+     "kind": "fill",
+     "value": "New York"
+    },
+    {
+     "node": 27,
+     "role": "combobox",
+     "label": "Open Where else?",
+     "section": "Enter your origin dialog",
+     "document_id": 1790376554150.9,
+     "form": 13,
+     "dialog": true,
+     "expanded": "true",
+     "kind": "click",
+     "value": "New York"
+    },
+    {
+     "node": 28,
+     "role": "button",
+     "label": "Origin, Select multiple airports",
+     "section": "Enter your origin dialog",
+     "document_id": 1790376554150.9,
+     "form": 13,
+     "dialog": true,
+     "kind": "click",
+     "value": ""
+    },
+    {
+     "node": 29,
+     "role": "option",
+     "label": "New York",
+     "section": "listbox",
+     "document_id": 1790376554150.9,
+     "suggestion_for": 27,
+     "form": 13,
+     "dialog": true,
+     "selected": "false",
+     "kind": "click",
+     "value": "0"
+    },
+    {
+     "node": 30,
+     "role": "button",
+     "label": "Toggle nearby airports for New York",
+     "section": "listbox",
+     "document_id": 1790376554150.9,
+     "form": 13,
+     "dialog": true,
+     "expanded": "true",
+     "kind": "click",
+     "value": ""
+    },
+    {
+     "node": 31,
+     "role": "option",
+     "label": "John F. Kennedy International Airport (JFK)",
+     "section": "listbox",
+     "document_id": 1790376554150.9,
+     "suggestion_for": 27,
+     "form": 13,
+     "dialog": true,
+     "selected": "false",
+     "kind": "click",
+     "value": "0"
+    },
+    {
+     "node": 32,
+     "role": "option",
+     "label": "LaGuardia Airport (LGA)",
+     "section": "listbox",
+     "document_id": 1790376554150.9,
+     "suggestion_for": 27,
+     "form": 13,
+     "dialog": true,
+     "selected": "false",
+     "kind": "click",
+     "value": "0"
+    },
+    {
+     "node": 33,
+     "role": "option",
+     "label": "Newark Liberty International Airport (EWR)",
+     "section": "listbox",
+     "document_id": 1790376554150.9,
+     "suggestion_for": 27,
+     "form": 13,
+     "dialog": true,
+     "selected": "false",
+     "kind": "click",
+     "value": "0"
+    },
+    {
+     "node": 34,
+     "role": "option",
+     "label": "Buffalo, New York",
+     "section": "listbox",
+     "document_id": 1790376554150.9,
+     "suggestion_for": 27,
+     "form": 13,
+     "dialog": true,
+     "selected": "false",
+     "kind": "click",
+     "value": "0"
+    },
+    {
+     "node": 35,
+     "role": "button",
+     "label": "Toggle nearby airports for Buffalo, New York",
+     "section": "listbox",
+     "document_id": 1790376554150.9,
+     "form": 13,
+     "dialog": true,
+     "expanded": "false",
+     "kind": "click",
+     "value": ""
+    }
+   ],
+   [
+    [
+     27,
+     "New York",
+     false,
+     null,
+     false,
+     false
+    ]
+   ]
+  ],
+  "page_key": [
+   1790376554150.9,
+   "https://www.google.com/travel/flights?hl=en",
+   0,
+   0,
+   1120,
+   780,
+   [
+    [
+     27,
+     "New York",
+     false,
+     null,
+     false,
+     false
+    ]
+   ]
+  ],
+  "guards": {
+   "27": [
+    27,
+    "combobox",
+    "Where else?",
+    "New York",
+    false,
+    null,
+    false,
+    false,
+    null,
+    "true",
+    null,
+    null,
+    null,
+    "New York‌\nSelect multiple airports\nNew York\nCity in New York State\nJohn F. Kennedy International AirportJFK\n12 mi to destination\nLaGuardia AirportLGA\n8 mi to destination\nNewark Liberty International AirportEWR\n8 mi to destination\nBuffalo, New York\nCity in New York State\nNiagara Falls, New York\nCity in New York State\nRochester, New York\nCity in New York State\nAlbany, New York\nCity in New York State"
+   ],
+   "28": [
+    28,
+    "button",
+    "Origin, Select multiple airports",
+    "",
+    null,
+    null,
+    null,
+    false,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "New York‌\nSelect multiple airports\nNew York\nCity in New York State\nJohn F. Kennedy International AirportJFK\n12 mi to destination\nLaGuardia AirportLGA\n8 mi to destination\nNewark Liberty International AirportEWR\n8 mi to destination\nBuffalo, New York\nCity in New York State\nNiagara Falls, New York\nCity in New York State\nRochester, New York\nCity in New York State\nAlbany, New York\nCity in New York State"
+   ],
+   "29": [
+    29,
+    "option",
+    "New York",
+    0,
+    null,
+    null,
+    null,
+    false,
+    null,
+    null,
+    null,
+    "false",
+    null,
+    "New York\nCity in New York State"
+   ],
+   "30": [
+    30,
+    "button",
+    "Toggle nearby airports for New York",
+    "",
+    null,
+    null,
+    null,
+    false,
+    null,
+    "true",
+    null,
+    null,
+    null,
+    "New York‌\nSelect multiple airports\nNew York\nCity in New York State\nJohn F. Kennedy International AirportJFK\n12 mi to destination\nLaGuardia AirportLGA\n8 mi to destination\nNewark Liberty International AirportEWR\n8 mi to destination\nBuffalo, New York\nCity in New York State\nNiagara Falls, New York\nCity in New York State\nRochester, New York\nCity in New York State\nAlbany, New York\nCity in New York State"
+   ],
+   "31": [
+    31,
+    "option",
+    "John F. Kennedy International Airport (JFK)",
+    0,
+    null,
+    null,
+    null,
+    false,
+    null,
+    null,
+    null,
+    "false",
+    null,
+    "John F. Kennedy International AirportJFK\n12 mi to destination"
+   ],
+   "32": [
+    32,
+    "option",
+    "LaGuardia Airport (LGA)",
+    0,
+    null,
+    null,
+    null,
+    false,
+    null,
+    null,
+    null,
+    "false",
+    null,
+    "LaGuardia AirportLGA\n8 mi to destination"
+   ],
+   "33": [
+    33,
+    "option",
+    "Newark Liberty International Airport (EWR)",
+    0,
+    null,
+    null,
+    null,
+    false,
+    null,
+    null,
+    null,
+    "false",
+    null,
+    "Newark Liberty International AirportEWR\n8 mi to destination"
+   ],
+   "34": [
+    34,
+    "option",
+    "Buffalo, New York",
+    0,
+    null,
+    null,
+    null,
+    false,
+    null,
+    null,
+    null,
+    "false",
+    null,
+    "Buffalo, New York\nCity in New York State"
+   ],
+   "35": [
+    35,
+    "button",
+    "Toggle nearby airports for Buffalo, New York",
+    "",
+    null,
+    null,
+    null,
+    false,
+    null,
+    "false",
+    null,
+    null,
+    null,
+    "New York‌\nSelect multiple airports\nNew York\nCity in New York State\nJohn F. Kennedy International AirportJFK\n12 mi to destination\nLaGuardia AirportLGA\n8 mi to destination\nNewark Liberty International AirportEWR\n8 mi to destination\nBuffalo, New York\nCity in New York State\nNiagara Falls, New York\nCity in New York State\nRochester, New York\nCity in New York State\nAlbany, New York\nCity in New York State"
+   ]
+  },
+  "omitted_actions": 0
+ }
+}

@@ -6,7 +6,9 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build": "node scripts/build.mjs",
+    "watch": "node scripts/build.mjs --watch"
   },
   "license": "MIT",
   "dependencies": {
@@ -16,6 +18,7 @@
     "@types/chrome": "^0.3.0",
     "@types/node": "^26.6.2",
     "esbuild": "^0.28.2",
+    "playwright": "1.63.0",
     "typescript": "^7.0.2",
     "vitest": "^5.0.1"
   }
