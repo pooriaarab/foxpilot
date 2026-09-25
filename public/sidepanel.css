@@ -32,9 +32,16 @@
   box-sizing: border-box;
 }
 
+html,
 body {
+  height: 100%;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
   margin: 0;
-  padding: 16px;
+  padding: 16px 16px 0;
   background: var(--bg);
   color: var(--text);
   font: 13px/1.45 system-ui, -apple-system, sans-serif;
@@ -272,9 +279,15 @@ textarea:focus {
   font-size: 11px;
 }
 
+/* The log takes the rest of the panel and scrolls on its own, newest step in view. */
 .log {
+  flex: 1;
+  min-height: 0;
   margin-top: 14px;
+  padding-bottom: 16px;
   border-top: 1px solid var(--line);
+  overflow-y: auto;
+  scroll-behavior: smooth;
 }
 
 #steps {
@@ -289,14 +302,6 @@ textarea:focus {
   gap: 2px 8px;
   padding: 9px 0;
   border-bottom: 1px solid var(--line);
-  animation: enter 0.25s ease;
-}
-
-@keyframes enter {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
 }
 
 .n {

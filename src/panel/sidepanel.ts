@@ -135,12 +135,25 @@ function render(view: AgentView) {
   // For tests and debugging from the panel's console.
   (window as unknown as { __zipline: AgentView }).__zipline = view;
   const list = $<HTMLOListElement>("steps");
-  list.replaceChildren(...view.history.map(stepItem));
+  // Rows are created once (so each animates in once) and then only refreshed.
+  list.querySelector(".thinking")?.remove();
+  const rows = list.querySelectorAll<HTMLLIElement>("li[data-step]");
+  if (rows.length > view.history.length) list.replaceChildren();
+  view.history.forEach((step, i) => {
+    const existing = list.querySelector<HTMLLIElement>(`li[data-step="${step.step}"]`);
+    const fresh = stepItem(step);
+    fresh.dataset.step = String(step.step);
+    if (!existing) list.append(fresh);
+    else existing.querySelector(".ms")!.textContent = fresh.querySelector(".ms")!.textContent;
+    void i;
+  });
   if (view.status === "predicted" && view.decision) {
     const li = Object.assign(document.createElement("li"), { className: "thinking" });
     li.textContent = `→ ${view.decision.operation.replace("_", " ")} ${view.decision.target ?? ""}`;
     list.append(li);
   }
+  const log = list.parentElement!;
+  log.scrollTop = log.scrollHeight;
   $("clock-sub").textContent = `${view.history.length} actions · ${view.modelMs} ms in GLiNER2`;
   const result = $<HTMLParagraphElement>("result");
   const final = ["done", "blocked", "stopped", "error"].includes(view.status);
@@ -153,6 +166,7 @@ function render(view: AgentView) {
         : view.status === "stopped"
           ? "Stopped."
           : `${view.status === "blocked" ? "Blocked" : "Error"}: ${view.message ?? "no action left to take"}`;
+    log.scrollTop = log.scrollHeight;
   }
 }
 
