@@ -38,18 +38,36 @@
               <div class="now"><span class="temp">14°C</span><div>Light rain<br>Precipitation 53% · Humidity 79% · Wind 8 km/h</div></div>
               <div class="days"><span>Sat 16° 9°</span><span>Sun 18° 8°</span><span>Mon 18° 8°</span><span>Tue 16° 13°</span><span>Wed 17° 11°</span></div>
             </div>
-            <div class="result"><a href="#">Seattle, WA Weather Forecast | AccuWeather</a><p>Hourly and 10-day forecasts, radar and severe weather alerts for Seattle, Washington.</p></div>
-            <div class="result"><a href="#">Seattle weather: rain returns this weekend</a><p>A cold front brings showers through Sunday before a dry start to next week, forecasters say.</p></div>
+            <div class="result"><div style="font-size:13px;color:#bdc1c6">AccuWeather · https://www.accuweather.com › seattle › weather-forecast</div><a href="#">Seattle, WA Weather Forecast</a><p>Hourly and 10-day forecasts, radar and severe weather alerts for Seattle, Washington.</p></div>
+            <div class="result"><div style="font-size:13px;color:#bdc1c6">KIRO 7 News · https://www.kiro7.com › weather</div><a href="#">Seattle weather: rain returns this weekend</a><p>A cold front brings showers through Sunday before a dry start to next week, forecasters say.</p></div>
           </section>
           <aside>
             <div class="card">People also search for: Seattle rainfall by month · Mount Rainier weather · Portland weather</div>
             <div class="card">Sponsored · Rain jackets 30% off at Northwind Outfitters. Shop now.</div>
           </aside>
         </main>`;
+      const stock = (q) => `
+        <header><span class="logo">Findr</span><form role="search"><input type="search" aria-label="Search" name="q" value="${q}"></form></header>
+        <nav><span>All</span><span>News</span><span>Finance</span><span>Images</span></nav>
+        <main>
+          <section>
+            <div class="quote" id="quote">
+              <div id="price" style="font-size:40px">335.94 USD <span style="font-size:18px;color:#81c995">▲ 0.57% +1.92 today</span></div>
+              <div id="after" style="color:#9aa0a6;font-size:13px">Closed: Sep 25, 6:40 PM EDT · After hours 336.74 +0.80 (0.24%)</div>
+              <div id="stats" style="margin-top:14px;padding:14px;border-radius:12px;background:#2b2c30">1D 5D 1M 6M YTD 1Y 5Y Max · 330 335 340 345 · 10:00 AM 12:00 PM 2:00 PM 4:00 PM 6:00 PM 8:00 PM · Previous close 334.02 · Open 333.94 · High 347.22 · Low 332.79 · Mkt cap 118.52B · P/E ratio - · Dividend - · Qtrly Div Amt - · 52-wk high 384.56 · 52-wk low 118.30 · Data from Nasdaq, delayed by 15 minutes · Disclaimer</div>
+            </div>
+            <div class="result"><div style="font-size:13px;color:#bdc1c6">Yahoo Finance · https://finance.yahoo.com › quote › SNOW</div><a href="#">SNOW Snowflake Inc.</a><p>Delayed quote, charts and news for Snowflake Inc. (SNOW).</p></div>
+          </section>
+          <aside>
+            <div class="card">Related: Palantir Technologies Inc 189.67 USD 1.52% · Microsoft Corp 516.17 USD 3.66% · NVIDIA Corp 225.07 USD 0.22%</div>
+            <div class="card">Quarterly financials 2027 Q2 1.55B +35.09% Y/Y Revenue</div>
+          </aside>
+        </main>`;
       const home = () => `<div class="home"><span class="logo">Findr</span><form role="search"><input type="search" aria-label="Search" name="q" placeholder="Search the web"></form></div>`;
       const render = () => {
         const q = new URLSearchParams(location.search).get("q");
-        app.innerHTML = q ? results(q.replace(/[<>"]/g, "")) : home();
+        const safe = (q || "").replace(/[<>"]/g, "");
+        app.innerHTML = !q ? home() : /stock/i.test(q) ? stock(safe) : results(safe);
         app.querySelector("form").addEventListener("submit", (e) => {
           e.preventDefault();
           location.search = "?q=" + encodeURIComponent(app.querySelector("input").value);
