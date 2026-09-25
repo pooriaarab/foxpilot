@@ -4,6 +4,7 @@ import { TabBrowser, StalePage } from "./browser";
 import { choose, requirements, type Decision, type Memory, type Part, type Scorer } from "./controller";
 import { firstDate, normalise } from "./dates";
 import { Refused, type FieldContext, type FieldWriter } from "./fieldtext";
+import { searchQuery } from "./search";
 import type { HistoryEntry, Page } from "./types";
 
 export const MAX_STEPS = 60;
@@ -221,6 +222,7 @@ export class Agent {
         recent_actions: this.view.history.slice(-6).map((h) => ({ action: h.action, text: h.text })),
         date: decision.date,
         candidates: (this.parts.find((p) => p.text === decision.requirement)?.values ?? []).map((v) => this.surfaces.get(v) ?? v),
+        textFields: new Set(page.actions.filter((a) => a.kind === "fill").map((a) => a.node)).size,
       };
       const started = performance.now();
       try {
@@ -236,6 +238,9 @@ export class Agent {
       }
       textMs = Math.round(performance.now() - started);
       this.view.textCalls.push({ field: action.label, value: text, ms: textMs });
+      // The whole goal went in as a search query, so every part of it is asked;
+      // what is left is submitting it, not clicking results that name a part.
+      if (text === searchQuery(this.view.goal)) for (const part of this.parts) this.served.add(part.text);
     }
     await this.browser.act(action, page, text);
     const history = this.view.history;

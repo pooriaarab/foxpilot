@@ -23,7 +23,7 @@ const TASKS = {
   stock: ["http://localhost:5402/search.html", "snowflake stock price"],
   wiki: ["https://en.wikipedia.org/wiki/Main_Page", "Search Wikipedia for the Golden Gate Bridge."],
 };
-const [url, goal] = TASKS[process.argv[2] ?? "flights"];
+const [url, goal] = process.env.GOAL ? [process.env.URL ?? "http://localhost:5402/search.html", process.env.GOAL] : TASKS[process.argv[2] ?? "flights"];
 const useLlm = process.argv.includes("--llm");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

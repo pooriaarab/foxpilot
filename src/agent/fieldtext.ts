@@ -22,6 +22,8 @@ export type FieldContext = {
   date: string | null;
   /** Values GLiNER extracted from the requirement (surface form). */
   candidates: string[];
+  /** How many distinct text fields the page offers. */
+  textFields: number;
 };
 
 export interface FieldWriter {
@@ -40,9 +42,13 @@ export class SpanWriter implements FieldWriter {
   ) {}
 
   async write(context: FieldContext): Promise<string> {
-    // A short goal typed into a search box is the query itself ("Weather in
-    // Seattle"), not just the value one part of it names ("Seattle").
-    if (isSearchField(context.field) && this.parts.length <= 2) return searchQuery(context.goal);
+    // Into a search box, the goal is the query itself ("Weather in Seattle"),
+    // not the value one part of it names ("Seattle"): always for short goals,
+    // and for any goal when the search box is the page's only text field (a
+    // search engine home page given a whole trip to find).
+    if (isSearchField(context.field) && (this.parts.length <= 2 || context.textFields === 1)) {
+      return searchQuery(context.goal);
+    }
     const part = this.parts.find((p) => p.text === context.requirement);
     if (!part) throw new Refused("No requirement chose this field");
     if (part.date) return part.date;
@@ -84,6 +90,7 @@ export class LlmWriter implements FieldWriter {
   }
 
   async write(context: FieldContext): Promise<string> {
+    if (isSearchField(context.field) && context.textFields === 1) return searchQuery(context.goal);
     const generator = await this.load();
     const messages = [
       { role: "system", content: TEXT_VALUE },

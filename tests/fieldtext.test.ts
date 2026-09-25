@@ -20,12 +20,24 @@ describe("isSearchField", () => {
 
 describe("SpanWriter", () => {
   const found = new Map([["seattle", "Seattle"], ["new york", "New York"], ["2026-10-09", "2026-10-09"]]);
-  const base = { page: { title: "", text: "" }, recent_actions: [], date: null, candidates: [] };
+  const base = { page: { title: "", text: "" }, recent_actions: [], date: null, candidates: [], textFields: 3 };
 
   it("types the whole short goal into a search box", async () => {
     const parts = [{ text: "Weather", values: [], date: null }, { text: "in Seattle", values: ["seattle"], date: null }];
     const writer = new SpanWriter(parts, found);
     expect(await writer.write({ ...base, goal: "Weather in Seattle", requirement: "in Seattle", field: { label: "Search", role: "combobox" } })).toBe("Weather in Seattle");
+  });
+
+  it("types the whole goal when the search box is the only text field", async () => {
+    const parts = [
+      { text: "cheapest one-way ticket", values: [], date: null },
+      { text: "from New York", values: ["new york"], date: null },
+      { text: "to San Francisco", values: ["san francisco"], date: null },
+    ];
+    const writer = new SpanWriter(parts, found);
+    const goal = "cheapest one-way ticket from New York to San Francisco.";
+    expect(await writer.write({ ...base, textFields: 1, goal, requirement: "from New York", field: { label: "Search", role: "combobox" } }))
+      .toBe("cheapest one-way ticket from New York to San Francisco");
   });
 
   it("types the requirement's own value for multi-part goals", async () => {
