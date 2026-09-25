@@ -29,6 +29,11 @@ export function qualifiers(goal: string): Qualifiers | null {
       break;
     }
   }
+  // A red-eye leaves late at night.
+  if (!q.window && /\b(red[- ]?eye|overnight)\b/.test(g)) {
+    q.window = WINDOWS.night;
+    q.windowName = "red-eye";
+  }
   if (/\b(nonstop|non-stop|direct)\b/.test(g)) q.nonstop = true;
   return q.order || q.window || q.nonstop ? q : null;
 }
@@ -96,9 +101,13 @@ export function describe(q: Qualifiers, row: Row): string {
  */
 export function stripQualifiers(goal: string): string {
   return goal
+    // A stated preference ("I prefer nonstop red-eye") picks among results; none of it is a form value.
+    .replace(/(^|[.;,!?]\s*|\s)(?:I(?:'d| would)? prefer|preferably|ideally|if possible|I(?:'d| would) like it)\b[^.;!?]*/gi, "$1")
+    .replace(/\b(?:red[- ]?eye|overnight)\b/gi, " ")
     .replace(/\b(?:in the |on the |at )?(?:morning|afternoon|evening|night)\b/gi, " ")
     .replace(/\b(?:cheapest|lowest[- ]priced?|least expensive|most expensive|priciest|highest[- ]priced?|fastest|shortest|quickest|earliest|latest|nonstop|non-stop|direct)\b/gi, " ")
     .replace(/\s+([,.;:!?])/g, "$1")
+    .replace(/[,;:]+(?=[.!?]|\s*$)/g, "")
     .replace(/\s{2,}/g, " ")
     .trim();
 }

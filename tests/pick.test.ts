@@ -7,6 +7,7 @@ describe("qualifiers", () => {
       .toEqual({ order: "price-asc", window: [300, 720], windowName: "morning" });
     expect(qualifiers("fastest nonstop flight to Denver")).toEqual({ order: "duration-asc", nonstop: true });
     expect(qualifiers("Get directions from Berlin Hauptbahnhof to Brandenburg Gate.")).toBeNull();
+    expect(qualifiers("cheapest flight. I prefer nonstop redeye")).toEqual({ order: "price-asc", window: [1260, 300], windowName: "red-eye", nonstop: true });
   });
 });
 
@@ -46,5 +47,9 @@ describe("stripQualifiers", () => {
       .toBe("one-way ticket from New York to San Francisco on October 9, 2026");
     expect(stripQualifiers("fastest nonstop flight to Denver in the evening")).toBe("flight to Denver");
     expect(stripQualifiers("Get directions from Berlin Hauptbahnhof to Brandenburg Gate.")).toBe("Get directions from Berlin Hauptbahnhof to Brandenburg Gate.");
+    expect(stripQualifiers("Cheapest one-way ticket from New York to San Francisco on October 9, 2026. I prefer nonstop redeye"))
+      .toBe("one-way ticket from New York to San Francisco on October 9, 2026.");
+    expect(stripQualifiers("Flights from Boston to Denver on May 3, preferably something with Wi-Fi."))
+      .toBe("Flights from Boston to Denver on May 3.");
   });
 });
