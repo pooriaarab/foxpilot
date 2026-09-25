@@ -50,6 +50,11 @@ function filledLabel(history: HistoryEntry[]) {
   return [...history].reverse().find((h) => h.kind === "fill")?.action ?? null;
 }
 
+/** The page's controls by kind and label, ignoring text and geometry. */
+function controls(page: Page): string {
+  return JSON.stringify(page.actions.map((a) => [a.kind, a.label, a.value ?? null]));
+}
+
 function opensDialog(page: Page) {
   return page.actions.some((a) => a.dialog);
 }
@@ -191,8 +196,14 @@ export class Agent {
     const selected = decision.choice;
     if (selected === "DONE" || selected === "BLOCKED") {
       if (!(await this.browser.fresh(page))) {
-        this.view.status = "ready";
-        throw new StalePage("Page changed since the decision. Choose again.");
+        // Live pages change text on their own; what matters for "nothing
+        // left to do" is that the controls it judged are still the same.
+        const now = await this.browser.observe();
+        if (controls(now) !== controls(page)) {
+          this.page = now;
+          this.view.status = "ready";
+          throw new StalePage("Page changed since the decision. Choose again.");
+        }
       }
       this.view.status = selected === "DONE" ? "done" : "blocked";
       return;

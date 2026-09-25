@@ -132,8 +132,12 @@ export class TabBrowser {
   }
 
   async act(action: Action, page: Page, text?: string | null): Promise<void> {
-    if (!(await this.fresh(page, action))) throw new StalePage("Page changed since this decision. Observe again.");
     const kind = action.kind;
+    // Waiting and scrolling cannot hit the wrong target, so a page that keeps
+    // changing on its own (live results, tickers) must not block them.
+    if (kind !== "wait" && kind !== "scroll" && !(await this.fresh(page, action))) {
+      throw new StalePage("Page changed since this decision. Observe again.");
+    }
     if (kind === "wait") {
       await sleep(600);
     } else if (kind === "scroll") {
