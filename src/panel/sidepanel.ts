@@ -5,6 +5,7 @@ import { Agent, type AgentView, type Step } from "../agent/agent";
 import { TabBrowser } from "../agent/browser";
 import { LlmWriter, SpanWriter, type FieldWriter } from "../agent/fieldtext";
 import { Gliner2 } from "../model/gliner2";
+import { TabGroupStatus } from "./tabgroup";
 
 export const GLINER_MODEL = "onnx-community/gliner2-multi-v1-agent-ONNX";
 
@@ -22,16 +23,11 @@ const EXAMPLES = [
     goal: "Find a one-way ticket from New York to San Francisco on October 9, 2026.",
   },
   {
-    label: "🚶 Walking directions",
+    label: "🗺 Directions in Berlin",
     url: "https://www.google.com/maps?hl=en",
-    goal: "Get directions from Berlin Hauptbahnhof to Brandenburg Gate. Select Walking.",
+    goal: "Get directions from Berlin Hauptbahnhof to Brandenburg Gate.",
   },
-  {
-    label: "📚 Wikipedia search",
-    url: "https://en.wikipedia.org/wiki/Main_Page",
-    goal: "Search Wikipedia for the Golden Gate Bridge.",
-  },
-];
+]
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const goalBox = $<HTMLTextAreaElement>("goal");
@@ -136,6 +132,8 @@ function stepItem(step: Step): HTMLLIElement {
 }
 
 function render(view: AgentView) {
+  // For tests and debugging from the panel's console.
+  (window as unknown as { __zipline: AgentView }).__zipline = view;
   const list = $<HTMLOListElement>("steps");
   list.replaceChildren(...view.history.map(stepItem));
   if (view.status === "predicted" && view.decision) {
@@ -173,6 +171,8 @@ async function run() {
   runButton.classList.add("stop");
   runButton.disabled = false;
   let browser: TabBrowser | null = null;
+  const status = await TabGroupStatus.start(tabId);
+  void status.running();
   const started = performance.now();
   clock = window.setInterval(() => {
     $("elapsed").textContent = `${((performance.now() - started) / 1000).toFixed(1)} s`;
@@ -185,16 +185,21 @@ async function run() {
       browser,
       goal,
       (parts, found): FieldWriter => (useLlm ? llm! : new SpanWriter(parts, found)),
-      render,
+      (view) => {
+        render(view);
+        void status.update(view);
+      },
     );
     const view = await running.run();
     render(view);
+    await status.update(view);
     $("elapsed").textContent = `${(view.elapsedMs / 1000).toFixed(1)} s`;
   } catch (error) {
     const result = $<HTMLParagraphElement>("result");
     result.hidden = false;
     result.className = "result error";
     result.textContent = `Error: ${error instanceof Error ? error.message : error}`;
+    await status.failed();
   } finally {
     window.clearInterval(clock);
     running = null;

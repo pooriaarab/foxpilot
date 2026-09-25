@@ -9,7 +9,8 @@ import { chromium } from "playwright";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const TASKS = {
   flights: ["https://www.google.com/travel/flights?hl=en", "Find a one-way ticket from New York to San Francisco on October 9, 2026."],
-  maps: ["https://www.google.com/maps?hl=en", "Get directions from Berlin Hauptbahnhof to Brandenburg Gate. Select Walking."],
+  maps: ["https://www.google.com/maps?hl=en", "Get directions from Berlin Hauptbahnhof to Brandenburg Gate."],
+  walking: ["https://www.google.com/maps?hl=en", "Get directions from Berlin Hauptbahnhof to Brandenburg Gate. Select Walking."],
   wiki: ["https://en.wikipedia.org/wiki/Main_Page", "Search Wikipedia for the Golden Gate Bridge."],
 };
 const [url, goal] = TASKS[process.argv[2] ?? "flights"];
@@ -38,6 +39,7 @@ const panel = await panelPromise;
 panel.on("console", (m) => { if (m.type() === "error") console.log("[panel]", m.text()); });
 await panel.waitForFunction(() => /Ready|Failed/.test(document.getElementById("gliner-status")?.textContent ?? ""), null, { timeout: 600_000 });
 console.log("gliner:", await panel.locator("#gliner-status").textContent());
+if (!useLlm && (await panel.locator("#llm-toggle").isChecked())) await panel.locator("#llm-toggle").uncheck();
 if (useLlm) {
   await panel.locator("#llm-toggle").check();
   await panel.waitForFunction(() => /On:|Failed/.test(document.getElementById("llm-status")?.textContent ?? ""), null, { timeout: 600_000 });
@@ -49,6 +51,12 @@ await panel.waitForFunction(() => !document.getElementById("result")?.hidden, nu
 
 const steps = await panel.locator("#steps li").allTextContents();
 for (const s of steps) console.log("  ", s.replace(/\s+/g, " ").trim());
+console.log("tab group:", await worker.evaluate(async (id) => { const t = await chrome.tabs.get(id); return t.groupId === -1 ? "(none)" : (await chrome.tabGroups.get(t.groupId)).title; }, tabId));
 console.log("result:", await panel.locator("#result").textContent(), "| clock:", await panel.locator("#elapsed").textContent());
+if (process.env.DUMP) {
+  const { writeFileSync } = await import("node:fs");
+  writeFileSync(process.env.DUMP, JSON.stringify(await panel.evaluate(() => window.__zipline), null, 1));
+  console.log("wrote", process.env.DUMP);
+}
 await page.screenshot({ path: join(root, "e2e-page.png") });
 await context.close();

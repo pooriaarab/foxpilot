@@ -34,6 +34,8 @@ export type AgentView = {
   elapsedMs: number;
   modelMs: number;
   message?: string;
+  /** Every decision with the page's actions, for debugging. */
+  decisions?: (Decision & { served: string[]; actions: string[] })[];
 };
 
 export type SpansFound = Map<string, string>;
@@ -87,6 +89,7 @@ export class Agent {
     private readonly parts: Part[],
     private readonly writer: FieldWriter,
     private readonly onUpdate: (view: AgentView) => void,
+    private readonly surfaces: SpansFound,
   ) {
     this.view = { status: "ready", goal, parts, history: [], decision: null, textCalls: [], elapsedMs: 0, modelMs: 0 };
   }
@@ -108,7 +111,7 @@ export class Agent {
       classify: (text, name, labels) => model.classify(text, name, labels),
     };
     const parts = await requirements(task, recording);
-    const agent = new Agent(model, browser, task, parts, makeWriter(parts, found), onUpdate);
+    const agent = new Agent(model, browser, task, parts, makeWriter(parts, found), onUpdate, found);
     agent.page = await browser.observe();
     return agent;
   }
@@ -175,6 +178,7 @@ export class Agent {
     const decision = await choose(this.model, this.page, this.view.history, this.memory, this.refused, this.parts, this.served);
     this.view.modelMs += decision.latencyMs;
     this.view.decision = decision;
+    this.view.decisions = [...(this.view.decisions ?? []), { ...decision, served: [...this.served], actions: this.page.actions.map((a) => `${a.id} ${a.kind} ${a.label}`) }];
     this.view.status = "predicted";
     this.emit();
   }
@@ -205,6 +209,7 @@ export class Agent {
         page: { title: page.title, text: page.text.slice(0, 6000) },
         recent_actions: this.view.history.slice(-6).map((h) => ({ action: h.action, text: h.text })),
         date: decision.date,
+        candidates: (this.parts.find((p) => p.text === decision.requirement)?.values ?? []).map((v) => this.surfaces.get(v) ?? v),
       };
       const started = performance.now();
       try {
