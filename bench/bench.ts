@@ -4,8 +4,11 @@ import { Gliner2 } from "../src/model/gliner2";
 
 type Case = { kind: "extract" | "classify"; text: string; labels: Record<string, string> };
 
-env.allowRemoteModels = false;
-env.allowLocalModels = true; // off by default in browsers
+const params = new URLSearchParams(location.search);
+// ?model=<hub id> loads from the Hub; default is the local export.
+const modelId = params.get("model") ?? "dist-model";
+env.allowRemoteModels = modelId !== "dist-model";
+env.allowLocalModels = modelId === "dist-model"; // off by default in browsers
 env.localModelPath = "/";
 
 const log = (line: string) => {
@@ -15,10 +18,10 @@ const log = (line: string) => {
 
 async function main() {
   const ref = (await (await fetch("/export/reference.json")).json()) as { cases: Case[] };
-  const dtype = (new URLSearchParams(location.search).get("dtype") ?? "fp16") as "fp16" | "fp32";
+  const dtype = (params.get("dtype") ?? "fp16") as "fp16" | "fp32";
   let t = performance.now();
-  const model = await Gliner2.load("dist-model", { device: "webgpu", dtype });
-  log(`load ${Math.round(performance.now() - t)} ms (webgpu, ${dtype})`);
+  const model = await Gliner2.load(modelId, { device: "webgpu", dtype });
+  log(`load ${Math.round(performance.now() - t)} ms (${modelId}, webgpu, ${dtype})`);
 
   const extract = ref.cases.filter((c) => c.kind === "extract");
   const classify = ref.cases.filter((c) => c.kind === "classify");
