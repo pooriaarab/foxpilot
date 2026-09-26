@@ -2,7 +2,11 @@
 
 A browser agent that runs entirely on your device. Type a goal in the side panel; [GLiNER2](https://github.com/fastino-ai/GLiNER2) runs on your GPU with WebGPU, reads the page and drives it until the goal is done. No server, no API key, nothing about the page or your goal leaves the browser.
 
-On Google Flights, "Find a one-way ticket from New York to San Francisco on the 1st Friday of next month. I prefer the cheapest red-eye." takes 10 actions and about 7 seconds: ticket type, both cities with their autocompletes, the date (worked out in code from today) in the calendar, Search. Then it checks the results page against every part of the goal and highlights the cheapest flight leaving between 9 PM and 5 AM, under 8 seconds from pressing Run. Dates are resolved in code ("next Friday", "the last Monday of October", "in 2 weeks"), and calendar clicks need no model call.
+<p align="center">
+  <a href="media/zipline-flights.mp4"><img src="media/zipline-flights.gif" alt="Zipline filling in Google Flights from a typed goal, then highlighting the cheapest red-eye and a verified checklist" width="100%"></a>
+</p>
+
+In the recording (real time, no cuts): "Find a one-way ticket from New York to San Francisco on the first Friday of November. I prefer the cheapest red-eye." Zipline sets the ticket type, types both cities and takes their autocompletes, picks Friday, November 6 in the calendar and searches: 9 actions, 8.0 seconds. It then checks the results page against every part of the goal and highlights the cheapest flight leaving between 9 PM and 5 AM, 8.4 seconds after Run was pressed. Dates are resolved in code ("next Friday", "the last Monday of October", "in 2 weeks"), and calendar clicks need no model call.
 
 ## How it works
 
