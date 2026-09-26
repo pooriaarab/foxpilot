@@ -134,7 +134,8 @@
     // e.form is only set inside a real <form>, where a bare <button> submits.
     if (e.form && (e.type==='submit' || (e.tagName==='BUTTON' && !['button','reset'].includes(e.type))))
       base.submit=true;
-    for (const key of ['checked','selected','expanded','haspopup']) {
+    // Zipline: 'pressed' too, for toggle buttons (travel modes, filters).
+    for (const key of ['checked','selected','pressed','expanded','haspopup']) {
       const value=e.getAttribute('aria-'+key);
       if (value!==null) base[key]=value;
     }

@@ -17,6 +17,9 @@ export type Action = {
   self_link?: boolean;
   suggestion_for?: number;
   expanded?: string;
+  selected?: string;
+  checked?: string;
+  pressed?: string;
   haspopup?: string;
   delta?: number;
   rect?: { x: number; y: number; w: number; h: number };

@@ -131,8 +131,8 @@ export class Agent {
     if (!task) throw new Error("Type a goal first");
     const found: SpansFound = new Map();
     const recording: Scorer = {
-      extractEntities: async (text, types) => {
-        const entities = await model.extractEntities(text, types);
+      extractEntities: async (text, types, threshold) => {
+        const entities = await model.extractEntities(text, types, threshold);
         for (const spans of Object.values(entities)) for (const span of spans) found.set(span.text.toLowerCase(), span.text);
         return entities;
       },
@@ -212,9 +212,9 @@ export class Agent {
     }
     const stats = { calls: 0, model: 0, labels: 0 };
     const counted: Scorer = {
-      extractEntities: async (text, types) => {
+      extractEntities: async (text, types, threshold) => {
         const started = performance.now();
-        try { return await this.model.extractEntities(text, types); }
+        try { return await this.model.extractEntities(text, types, threshold); }
         finally { stats.calls++; stats.model += performance.now() - started; stats.labels = Math.max(stats.labels, Object.keys(types).length); }
       },
       classify: async (text, name, labels) => {
@@ -336,8 +336,11 @@ export class Agent {
     this.view.status =
       repeated.length === 3 && repeated.every((h) => h.pageChanged === false && h.kind !== "wait") ? "blocked" : "ready";
     if (this.view.status === "blocked") this.view.message = "Three actions in a row changed nothing";
-    // Parts without a value ("Book me a flight") are left to the page check.
-    else if (entry.pageChanged && sent(entry) && this.parts.every((p) => this.served.has(p.text) || (!p.values.length && !p.date))) {
+    // Parts without a value ("Book me a flight") are left to the page check, and
+    // so is a value typed then sent with Enter (Google Maps' destination is never
+    // "served": no suggestion was taken).
+    else if (sent(entry) && this.parts.every((p) => this.served.has(p.text) || (!p.values.length && !p.date) ||
+      history.some((h) => h.kind === "fill" && h.requirement === p.text))) {
       await this.finishIfVerified(navigations);
     }
   }

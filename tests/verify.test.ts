@@ -60,4 +60,25 @@ describe.skipIf(!have)("verify", () => {
     expect(verdict.problem).toBeTruthy();
     expect(verdict.verified).toBe(false);
   }, 60_000);
+
+  it("checks the travel mode is the selected one, not just on the page", async () => {
+    const goal = "Get walking directions from Marymoor Park to Blazing Bagels Redmond";
+    const mapsParts = await requirements(goal, model);
+    const page = (walking: boolean): Page => ({
+      url: "https://maps.example.test/dir", title: "Marymoor Park to Blazing Bagels - Google Maps", marker: 0, page_key: [], guards: {},
+      text: "Walking 21 min 1.1 miles via NE Marymoor Way and 176th Ave NE. Mostly flat. Details",
+      actions: [
+        { id: "d", kind: "click", label: "Driving", role: "radio", node: 1, document_id: 1, checked: String(!walking) },
+        { id: "w", kind: "click", label: "Walking", role: "radio", node: 2, document_id: 1, checked: String(walking) },
+        { id: "s", kind: "fill", label: "Starting point Marymoor Park, 6046 West Lake Sammamish Pkwy NE", role: "combobox", node: 3, document_id: 1, value: "Marymoor Park, 6046 West Lake Sammamish Pkwy NE, Redmond, WA 98052" },
+        { id: "t", kind: "fill", label: "Destination Blazing Bagels, 6975 176th Ave NE #365", role: "combobox", node: 4, document_id: 1, value: "Blazing Bagels, 6975 176th Ave NE #365, Redmond, WA 98052" },
+      ],
+    });
+    const walking = await verify(model, page(true), mapsParts, []);
+    expect(walking.checks.find((c) => c.part === "Get walking directions")).toMatchObject({ ok: true, evidence: "Walking" });
+    expect(walking.verified).toBe(true);
+    const driving = await verify(model, page(false), mapsParts, []);
+    expect(driving.checks.find((c) => c.part === "Get walking directions")?.ok).toBe(false);
+    expect(driving.verified).toBe(false);
+  }, 60_000);
 });
