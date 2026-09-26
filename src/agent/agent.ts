@@ -25,7 +25,11 @@ export type Step = HistoryEntry & {
   textWriter: string | null;
   elapsedMs: number;
   pageChanged: boolean | null;
+  /** Where this step's time went, in ms: deciding (GLiNER2 calls), acting, reading the page after. */
+  timing?: Timing;
 };
+
+export type Timing = { decide: number; calls: number; model: number; labels: number; act: number; observe: number };
 
 export type AgentView = {
   status: Status;
@@ -40,7 +44,7 @@ export type AgentView = {
   /** The finished page checked against the goal (set when the run ends early on it). */
   verdict?: Verdict;
   /** Every decision with the page's actions, for debugging. */
-  decisions?: (Decision & { served: string[]; actions: string[] })[];
+  decisions?: (Decision & { served: string[]; actions: string[]; ms?: number; calls?: number })[];
 };
 
 export type SpansFound = Map<string, string>;
@@ -100,6 +104,7 @@ export class Agent {
   private fruitless = 0;
   private startedAt: number | null = null;
   private page!: Page;
+  private timing: Timing | null = null;
   private stopRequested = false;
   view: AgentView;
 
@@ -197,10 +202,26 @@ export class Agent {
       this.view.status = "blocked";
       throw new Error(`Stopped at the ${MAX_STEPS}-action budget`);
     }
-    const decision = await choose(this.model, this.page, this.view.history, this.memory, this.refused, this.parts, this.served);
+    const stats = { calls: 0, model: 0, labels: 0 };
+    const counted: Scorer = {
+      extractEntities: async (text, types) => {
+        const started = performance.now();
+        try { return await this.model.extractEntities(text, types); }
+        finally { stats.calls++; stats.model += performance.now() - started; stats.labels = Math.max(stats.labels, Object.keys(types).length); }
+      },
+      classify: async (text, name, labels) => {
+        const started = performance.now();
+        try { return await this.model.classify(text, name, labels); }
+        finally { stats.calls++; stats.model += performance.now() - started; stats.labels = Math.max(stats.labels, Object.keys(labels).length); }
+      },
+    };
+    const started = performance.now();
+    const decision = await choose(counted, this.page, this.view.history, this.memory, this.refused, this.parts, this.served);
+    const decide = Math.round(performance.now() - started);
+    this.timing = { decide, calls: stats.calls, model: Math.round(stats.model), labels: stats.labels, act: 0, observe: 0 };
     this.view.modelMs += decision.latencyMs;
     this.view.decision = decision;
-    this.view.decisions = [...(this.view.decisions ?? []), { ...decision, served: [...this.served], actions: this.page.actions.map((a) => `${a.id} ${a.kind} ${a.label}`) }];
+    this.view.decisions = [...(this.view.decisions ?? []), { ...decision, served: [...this.served], actions: this.page.actions.map((a) => `${a.id} ${a.kind} ${a.label}`), ms: decide, calls: stats.calls }];
     this.view.status = "predicted";
     this.emit();
   }
@@ -258,7 +279,9 @@ export class Agent {
       // what is left is submitting it, not clicking results that name a part.
       if (text === searchQuery(this.view.goal)) for (const part of this.parts) this.served.add(part.text);
     }
+    const acting = performance.now();
     await this.browser.act(action, page, text);
+    const act = Math.round(performance.now() - acting);
     const history = this.view.history;
     const entry: Step = {
       step: history.length + 1,
@@ -285,7 +308,9 @@ export class Agent {
     };
     history.push(entry);
     this.emit();
+    const observing = performance.now();
     this.page = await this.browser.observe();
+    if (this.timing) entry.timing = { ...this.timing, act, observe: Math.round(performance.now() - observing) };
     for (const done of completedDates(this.parts, this.page, history)) this.served.add(done);
     // A control that opened a menu or picker has not answered its requirement yet.
     // Zipline addition: nor has one that opens a menu at all (aria-expanded,
@@ -309,11 +334,18 @@ export class Agent {
    * Zipline addition: the Python loop ends after two waits and two scrolls find
    * nothing left to do (2–4 s on Google Flights). Once every value is entered and
    * the form was just sent, the finished page is checked instead; if it shows
-   * the goal, the run ends there. Results get a second to load first.
+   * the goal, the run ends there. Results get up to a second to finish loading first.
    */
   private async finishIfVerified() {
-    await new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
-    this.page = await this.browser.observe();
+    // Wait until two looks in a row read the same page (results done loading), at most SETTLE_MS.
+    const until = performance.now() + SETTLE_MS;
+    let previous = this.page.fingerprint;
+    for (;;) {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      this.page = await this.browser.observe();
+      if (this.page.fingerprint === previous || performance.now() >= until) break;
+      previous = this.page.fingerprint;
+    }
     const verdict = await verify(this.model, this.page, this.parts, this.view.history);
     if (!verdict.verified) return;
     this.view.verdict = verdict;
