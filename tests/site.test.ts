@@ -88,3 +88,21 @@ describe("popups while typing", () => {
     expect(decision.target).not.toBe("Ask Alexa about this");
   });
 });
+
+describe("dropdowns", () => {
+  it("do not take a value their option does not name", async () => {
+    const page: Page = {
+      url: "https://example.test/s?k=mixer", title: "Results", text: "", marker: 0, page_key: [], guards: {},
+      actions: [
+        { id: "q", kind: "fill", label: "Search Amazon", role: "searchbox", node: 1, document_id: 1, value: "kitchenaid artisan mixer" },
+        { id: "o1", kind: "select", label: "Sort by: → Price: High to Low", role: "combobox", node: 2, document_id: 1, value: "price-desc-rank" },
+        { id: "o2", kind: "select", label: "Sort by: → Price: Low to High", role: "combobox", node: 2, document_id: 1, value: "price-asc-rank" },
+      ],
+    };
+    const parts: Part[] = [{ text: "kitchenaid hand mixer", values: ["kitchenaid hand mixer"], date: null }];
+    const scores: Record<string, number> = { "Sort by: → Price: High to Low": 0.29, "Sort by: → Price: Low to High": 0.27, "Search Amazon": 0.1 };
+    const model = { extractEntities: async () => ({}), classify: async (_t: string, _n: string, labels: Record<string, unknown>) => Object.fromEntries(Object.keys(labels).map((l) => [l, scores[l] ?? 0.01])) };
+    const decision = await choose(model, page, [], new Map(), new Set(), parts, new Set());
+    expect(decision.target).toBe("Search Amazon");
+  });
+});

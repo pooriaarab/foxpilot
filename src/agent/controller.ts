@@ -320,6 +320,7 @@ async function passOver(
 /** Assign requirements to available controls, respecting modal scope and explicit dates. */
 function best(ordered: Map<string, Group>, scores: Scores, parts: Part[]): Chosen[] {
   const valued = new Set(parts.filter((p) => p.values.length).map((p) => p.text));
+  const valuesOf = new Map(parts.map((p) => [p.text, p.values]));
   const dates = parts.filter((p) => p.date).map((p) => [p.text, p.date!] as const);
   const datedTexts = new Set(dates.map(([text]) => text));
   const anyOpen = [...ordered.values()].some((g) => g.open);
@@ -350,6 +351,11 @@ function best(ordered: Map<string, Group>, scores: Scores, parts: Part[]): Chose
       // Zipline addition: a value that is not a date does not go into a date field
       // ("from New York" scored 0.88 for "Departure" on one Google Flights layout).
       if (group.takesValue && valued.has(text) && !datedTexts.has(text) && isDateField(execute(group))) return;
+      // Zipline addition: a dropdown can only be set to one of its options, so an
+      // option serves a value only if it names it ("Sort by: → Price: High to Low"
+      // scored 0.29 for "kitchenaid hand mixer" on Amazon).
+      if (execute(group).kind === "select" && valued.has(text) &&
+          !(valuesOf.get(text) ?? []).every((value) => namesValue(execute(group).label, value))) return;
       if (score >= (valued.has(text) && group.takesValue ? VALUE_FLOOR : FLOOR)) column.set(index, score);
     });
     if (column.size) offers.push([group, column]);
