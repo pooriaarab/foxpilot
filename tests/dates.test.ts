@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { relativeDate, resolveDate } from "../src/agent/dates";
+import { normalise, relativeDate, resolveDate } from "../src/agent/dates";
 import { qualifiers } from "../src/agent/pick";
 
 // Friday, September 25, 2026 (local time, as the extension sees it).
@@ -41,5 +41,11 @@ describe("relative dates", () => {
   it("does not read 'last Friday of the month' as 'latest'", () => {
     expect(qualifiers("a flight on the last Friday of next month")).toBeNull();
     expect(qualifiers("the last flight of the day")?.order).toBe("depart-desc");
+  });
+
+  it("types the date when a writer echoes the goal's words", () => {
+    const wanted = relativeDate("1st Friday of next month")!;
+    expect(normalise("1st Friday of next month", wanted)).toBe(wanted);
+    expect(normalise("Seattle", wanted)).toBe("Seattle");
   });
 });
