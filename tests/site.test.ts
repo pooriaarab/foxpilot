@@ -139,3 +139,26 @@ describe("typos in the goal", () => {
     expect(decision.covered).toEqual(["from Marmoor Park"]);
   });
 });
+
+describe("a field renamed by typing into it", () => {
+  it("is still sent (Google Maps' destination box)", async () => {
+    const page: Page = {
+      url: "https://maps.example.test/dir", title: "Maps", text: "", marker: 0, page_key: [], guards: {},
+      actions: [
+        { id: "a", kind: "fill", label: "Starting point Marymoor Park, 6046 West Lake Sammamish Pkwy NE", role: "combobox", node: 4, document_id: 1, value: "Marymoor Park, 6046 West Lake Sammamish Pkwy NE" },
+        { id: "b", kind: "fill", label: "Destination Blazing Bagels Redmond", role: "combobox", node: 5, document_id: 1, value: "Blazing Bagels Redmond" },
+        { id: "press_enter", kind: "key", label: "Press Enter to submit the focused field" },
+        { id: "wait", kind: "wait", label: "Wait for the page to update" },
+      ],
+    };
+    const history: HistoryEntry[] = [
+      { action: "Choose starting point, or click on the map...", node: 4, document_id: 1, kind: "fill", text: "Marymoor Park", requirement: "from Marymoor Park" },
+      { action: "Marymoor Park    West Lake Sammamish Pkwy NE, Redmond, WA", node: 9, document_id: 1, kind: "click", committed_field: "Choose starting point, or click on the map..." },
+      { action: "Choose destination, or click on the map...", node: 5, document_id: 1, kind: "fill", text: "Blazing Bagels Redmond", requirement: "to Blazing Bagels Redmond" },
+    ];
+    const parts: Part[] = [{ text: "to Blazing Bagels Redmond", values: ["blazing bagels redmond"], date: null }];
+    const model = { extractEntities: async () => ({}), classify: async (_t: string, _n: string, labels: Record<string, unknown>) => Object.fromEntries(Object.keys(labels).map((l) => [l, 0.01])) };
+    const decision = await choose(model, page, history, new Map(), new Set(), parts, new Set(parts.map((p) => p.text)));
+    expect(decision.operation).toBe("PRESS_ENTER");
+  });
+});

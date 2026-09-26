@@ -483,8 +483,11 @@ async function dialog(model: Scorer, ordered: Map<string, Group>, chosen: Chosen
 }
 
 /** What a fill belongs to: its form, or itself when it has none. */
-function sentKey(entry: { form?: unknown; action?: string }): string {
-  return JSON.stringify(entry.form != null ? entry.form : ["field", entry.action]);
+function sentKey(entry: { form?: unknown; action?: string; label?: string; node?: number | null }): string {
+  // Zipline addition: a field outside a form is keyed by its node when known.
+  // Google Maps renames the field once typed into ("Choose destination…" →
+  // "Destination Blazing Bagels Redmond"), which lost track of it by label.
+  return JSON.stringify(entry.form != null ? entry.form : ["field", entry.node ?? entry.action ?? entry.label]);
 }
 
 /**
@@ -501,10 +504,14 @@ export function unsentForms(state: Page, history: HistoryEntry[]): Set<string> {
     if (e.kind === "fill" || (e.kind === "click" && e.form != null && !sending)) filledAt.set(sentKey(e), index);
     // A click on the form's Search button sends it too, on pages without a real <form>.
     if (sending) sentAt.set(sentKey(e), index);
-    if (e.committed_field) sentAt.set(JSON.stringify(["field", e.committed_field]), index);
+    // Taking a suggestion, or Enter outside a form, sends the field typed into last.
+    if (e.committed_field || (e.kind === "key" && e.submit && e.form == null)) {
+      const typed = history.slice(0, index).reverse().find((f) => f.kind === "fill" && (!e.committed_field || f.action === e.committed_field));
+      sentAt.set(typed ? sentKey(typed) : JSON.stringify(["field", e.committed_field]), index);
+    }
   });
   const holding = new Set(
-    state.actions.filter((a) => a.kind === "fill" && a.value).map((a) => sentKey({ form: a.form, action: a.label })),
+    state.actions.filter((a) => a.kind === "fill" && a.value).map((a) => sentKey({ form: a.form, action: a.label, node: a.node })),
   );
   const pending = new Set(
     [...filledAt].filter(([k, at]) => at > (sentAt.get(k) ?? -1) && holding.has(k)).map(([k]) => k),
