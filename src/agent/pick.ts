@@ -90,7 +90,8 @@ export function describe(q: Qualifiers, row: Row): string {
   };
   const words = [q.order ? order[q.order] : "Best", q.windowName, q.nonstop ? "nonstop" : undefined, "option"].filter(Boolean);
   const title = words.join(" ");
-  return row.price !== undefined ? `${title[0]!.toUpperCase()}${title.slice(1)} · $${row.price}` : title;
+  const price = row.price === undefined ? undefined : Number.isInteger(row.price) ? String(row.price) : row.price.toFixed(2);
+  return price !== undefined ? `${title[0]!.toUpperCase()}${title.slice(1)} · $${price}` : title;
 }
 
 /**
