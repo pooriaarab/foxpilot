@@ -123,7 +123,6 @@ export function satisfied(action: Action, history: HistoryEntry[]): boolean {
   return false;
 }
 
-/** Group supported actions by observed node, preserving document order. */
 const OPTION_ROLES = new Set(["option", "menuitemradio", "menuitemcheckbox", "radio", "tab"]);
 
 /**
@@ -137,6 +136,47 @@ export function isUnsafe(action: Action): boolean {
   return UNSAFE.test(action.label);
 }
 
+/**
+ * Zipline addition: a bare "Search" or "Submit" button sends the form; it is
+ * not what a part of the goal refers to. On Google Flights, "Search" (0.66)
+ * served "Find a one-way ticket" and sent a round trip with no return date.
+ */
+const SENDS = /^(search|submit|go|send|find)$/i;
+
+function sends(action: Action): boolean {
+  return action.kind === "click" && !action.dialog && SENDS.test(clean(action.label));
+}
+
+/**
+ * Zipline addition: a menu opener ("Change ticket type. Round trip") only shows
+ * options; the option itself still has to clear the floor. When the opener is a
+ * part's top answer it needs less: one run scored it 0.49 and never opened it.
+ */
+const MENU_FLOOR = 0.4;
+
+function opensMenu(action: Action): boolean {
+  if (action.kind !== "click") return false;
+  const popup = String(action.haspopup ?? "").toLowerCase();
+  return action.role === "combobox" || (popup !== "" && popup !== "false") || action.expanded != null;
+}
+
+/**
+ * Zipline addition: a clicked control stays closed for the rest of the run,
+ * but a send button whose form was edited after the click has something new
+ * to send (the ticket type changed after the first "Search").
+ */
+function editedSince(action: Action, history: HistoryEntry[]): boolean {
+  if (action.form == null) return false;
+  let clicked = -1;
+  history.forEach((entry, index) => {
+    const sameNode = action.node != null && entry.node === action.node && entry.document_id === action.document_id;
+    if (entry.kind === "click" && (sameNode || entry.action === action.label)) clicked = index;
+  });
+  if (clicked < 0) return false;
+  return history.slice(clicked + 1).some((entry) => entry.form === action.form && (entry.kind === "fill" || entry.kind === "click"));
+}
+
+/** Group supported actions by observed node, preserving document order. */
 export function groups(state: Page, history: HistoryEntry[], refused: Set<string>): Map<string, Group> {
   const ordered = new Map<string, Group>();
   state.actions.forEach((action, position) => {
@@ -298,11 +338,15 @@ function best(ordered: Map<string, Group>, scores: Scores, parts: Part[]): Chose
   }
   const offers: [Group, Map<number, number>][] = [];
   for (const group of openGroups) {
-    if (isUnsafe(execute(group))) continue;
+    if (isUnsafe(execute(group)) || sends(execute(group))) continue;
     const column = new Map<number, number>();
     texts.forEach((text, index) => {
       const score = rate(group, scores.get(text));
       if (!score) return;
+      if (!valued.has(text) && score >= MENU_FLOOR && opensMenu(execute(group)) && score === top(scores.get(text)!)[1]) {
+        column.set(index, score);
+        return;
+      }
       // Zipline addition: a value that is not a date does not go into a date field
       // ("from New York" scored 0.88 for "Departure" on one Google Flights layout).
       if (group.takesValue && valued.has(text) && !datedTexts.has(text) && isDateField(execute(group))) return;
@@ -395,13 +439,21 @@ function sentKey(entry: { form?: unknown; action?: string }): string {
 async function unsentForm(
   model: Scorer, state: Page, ordered: Map<string, Group>, history: HistoryEntry[], chosen: Chosen[],
 ): Promise<Chosen | null> {
-  const filled = new Set(history.filter((e) => e.kind === "fill").map(sentKey));
-  const sent = new Set(history.filter((e) => e.submit).map(sentKey));
-  for (const e of history) if (e.committed_field) sent.add(JSON.stringify(["field", e.committed_field]));
+  // Zipline addition: order matters. A field filled after its form was sent
+  // makes the form unsent again (Python treats a form as sent once, forever).
+  const filledAt = new Map<string, number>();
+  const sentAt = new Map<string, number>();
+  history.forEach((e, index) => {
+    if (e.kind === "fill") filledAt.set(sentKey(e), index);
+    if (e.submit) sentAt.set(sentKey(e), index);
+    if (e.committed_field) sentAt.set(JSON.stringify(["field", e.committed_field]), index);
+  });
   const holding = new Set(
     state.actions.filter((a) => a.kind === "fill" && a.value).map((a) => sentKey({ form: a.form, action: a.label })),
   );
-  const pending = new Set([...filled].filter((k) => !sent.has(k) && holding.has(k)));
+  const pending = new Set(
+    [...filledAt].filter(([k, at]) => at > (sentAt.get(k) ?? -1) && holding.has(k)).map(([k]) => k),
+  );
   if (!pending.size) return null;
   const inPending = (form: unknown) => form != null && pending.has(JSON.stringify(form));
   for (const group of ordered.values()) {
@@ -412,7 +464,8 @@ async function unsentForm(
   const buttons = new Map<string, Group>();
   for (const group of ordered.values()) {
     const action = execute(group);
-    if (group.open && action.kind === "click" && inPending(action.form) && !isUnsafe(action)) buttons.set(clean(action.label), group);
+    const usable = group.open || (sends(action) && editedSince(action, history));
+    if (usable && action.kind === "click" && inPending(action.form) && !isUnsafe(action)) buttons.set(clean(action.label), group);
   }
   if (!buttons.size) return enter(state);
   const [value, confidence] = top(await model.classify(SUBMIT, "submit", asLabels(buttons.keys())));

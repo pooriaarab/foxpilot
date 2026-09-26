@@ -55,4 +55,22 @@ describe.skipIf(!have)("controller vs Python", () => {
     expect(decision.target).toBe("Change ticket type. Round trip");
     expect(decision.confidence).toBeGreaterThan(0.5);
   }, 120_000);
+
+  // Zipline addition: "Search" was clicked early, then the ticket type changed.
+  // The form has something new to send, so Search is pressed again.
+  it("flights: search again after the form changed", async () => {
+    const state = (JSON.parse(readFileSync(`${ROOT}tests/fixtures/flights-resend.json`, "utf8")) as { state: Page }).state;
+    const goal = oracle.find((c) => c.name === "flights-start")!.goal;
+    const parts = await requirements(goal, model);
+    const doc = state.actions[0]!.document_id;
+    const history: HistoryEntry[] = [
+      { action: "Where from?", node: 16, document_id: doc, kind: "fill", form: 13, text: "New York", requirement: parts[1]!.text },
+      { action: "Search", node: 99, document_id: doc, kind: "click", form: 13 },
+      { action: "Change ticket type. Round trip", node: 12, document_id: doc, kind: "click", form: 13 },
+      { action: "One way", kind: "click", requirement: parts[0]!.text },
+    ];
+    const served = new Set(parts.map((p) => p.text));
+    const decision = await choose(model, state, history, new Map(), new Set(), parts, served);
+    expect(decision.target).toBe("Search");
+  }, 120_000);
 });
