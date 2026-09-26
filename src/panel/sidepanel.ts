@@ -277,18 +277,18 @@ async function run() {
     const site = siteIn(goal);
     let task = goal;
     let opened = false;
+    browser = await attachOrOpenStart(tabId);
     if (site) {
-      const tab = await chrome.tabs.get(tabId);
-      if (!onSite(tab.url ?? "", site)) {
+      // The page's own location, read through the debugger (tab URLs need the "tabs" permission).
+      const here = await browser.evaluate<string>("location.href").catch(() => "");
+      if (!onSite(here, site)) {
         $("clock-sub").textContent = `Opening ${site.host}…`;
-        await navigateAndWait(tabId, site.url);
+        await browser.navigate(site.url);
         opened = true;
       }
       task = withoutSite(goal, site) || goal;
     }
     Object.assign(window, { __ziplineSite: site ? { ...site, opened } : null });
-    browser = await attachOrOpenStart(tabId);
-    if (opened) await browser.waitForLoad();
     const setup = performance.now();
     await browser.evaluate(CLEAR).catch(() => {});
     const useLlm = llmToggle.checked && llm && llmReady;
@@ -303,6 +303,8 @@ async function run() {
       },
     );
     const loopStart = performance.now();
+    const page = await browser.evaluate<{ url: string; title: string }>("({ url: location.href, title: document.title })").catch(() => null);
+    Object.assign(window, { __ziplinePage: page });
     const view = await running.run();
     const loopEnd = performance.now();
     render(view);
@@ -381,11 +383,13 @@ function runLog(): string {
   const view = (window as unknown as { __zipline?: AgentView }).__zipline;
   const answer = (window as unknown as { __ziplineAnswer?: unknown }).__ziplineAnswer;
   const site = (window as unknown as { __ziplineSite?: { host: string; opened: boolean } | null }).__ziplineSite;
+  const start = (window as unknown as { __ziplinePage?: { url: string; title: string } | null }).__ziplinePage;
   if (!view) return "No run yet.";
   const lines = [
     `Zipline run · ${new Date().toISOString()}`,
     `Goal: ${view.goal}`,
     ...(site ? [`Site: ${site.host} (${site.opened ? "opened first" : "already there"})`] : []),
+    ...(start ? [`Start page: ${start.title} · ${start.url.slice(0, 120)}`] : []),
     `Requirements: ${view.parts.map((p) => `"${p.text}"${p.values.length ? ` [${p.values.join(", ")}]` : ""}`).join(" · ")}`,
     `Status: ${view.status}${view.message ? ` (${view.message})` : ""} · ${(view.elapsedMs / 1000).toFixed(1)} s`,
     "",

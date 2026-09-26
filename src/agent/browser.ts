@@ -120,6 +120,13 @@ export class TabBrowser {
     await chrome.debugger.detach({ tabId: this.tabId }).catch(() => {});
   }
 
+  /** Loads a URL in the tab and waits for it (the extension has no "tabs" permission to read or set URLs). */
+  async navigate(url: string, maxMs = 15_000): Promise<void> {
+    const since = this.navigations;
+    await this.call("Page.navigate", { url });
+    await this.settleNavigation(since, 2000, maxMs);
+  }
+
   /**
    * After a send: if the page starts loading a new document within `startMs`,
    * wait for it to finish (up to `maxMs`). Returns whether one loaded.
