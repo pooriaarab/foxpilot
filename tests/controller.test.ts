@@ -90,4 +90,11 @@ describe.skipIf(!have)("controller vs Python", () => {
     const decision = await choose({ extractEntities: refuse, classify: refuse }, state, [], new Map(), new Set(), parts, served);
     expect(decision.target).toBe("Friday, October 2, 2026 , 275 US dollars");
   }, 60_000);
+
+  // Zipline addition: a "to …" part keeps its whole place name.
+  it("keeps the whole place in 'to Blazing Bagles Redmond'", async () => {
+    const parts = await requirements("Get walking directions from Marmoor Park to Blazing Bagles Redmond", model);
+    expect(parts.find((p) => p.text.startsWith("to "))?.values).toEqual(["blazing bagles redmond"]);
+    expect(parts.find((p) => p.text.startsWith("from "))?.values).toEqual(["marmoor park"]);
+  }, 60_000);
 });

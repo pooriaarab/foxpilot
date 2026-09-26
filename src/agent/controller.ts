@@ -88,6 +88,44 @@ export function namesValue(label: string, value: string): boolean {
   return Boolean(needle) && ` ${words(label)} `.includes(` ${needle} `);
 }
 
+const wordsOf = (text: string) =>
+  String(text).normalize("NFKD").toLowerCase().replace(/\p{M}/gu, "").match(/[\p{L}\p{N}_]+/gu) ?? [];
+
+/** Edit distance where swapping two neighbouring letters is one edit ("bagles" → "bagels"). */
+function edits(a: string, b: string): number {
+  if (Math.abs(a.length - b.length) > 2) return 3;
+  const d = Array.from({ length: a.length + 1 }, (_, i) => Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)));
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      d[i]![j] = Math.min(d[i - 1]![j]! + 1, d[i]![j - 1]! + 1, d[i - 1]![j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1));
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i]![j] = Math.min(d[i]![j]!, d[i - 2]![j - 2]! + 1);
+    }
+  }
+  return d[a.length]![b.length]!;
+}
+
+/**
+ * Zipline addition: namesValue that forgives typos in the goal. Each word of the
+ * value matches a word of the label in order, one edit off for words of 4–6
+ * letters and two for longer ones ("marmoor" ≈ "marymoor", "bagles" ≈ "bagels").
+ * Short words and numbers must match exactly.
+ */
+export function nearlyNames(label: string, value: string): boolean {
+  if (namesValue(label, value)) return true;
+  const want = wordsOf(value);
+  const have = wordsOf(label);
+  if (!want.length) return false;
+  const close = (a: string, b: string) =>
+    a === b || (!/\d/.test(a) && a.length >= 4 && edits(a, b) <= (a.length <= 6 ? 1 : 2));
+  for (let start = 0; start + want.length <= have.length; start++) {
+    if (want.every((word, k) => close(word, have[start + k]!))) return true;
+  }
+  return false;
+}
+
+/** The name part of a suggestion ("Marymoor Park    West Lake Sammamish Pkwy NE" → "Marymoor Park"). */
+const nameOf = (label: string) => label.split(/\s{2,}|\n/)[0]!;
+
 /** Split the goal into requirements and extract literal values with GLiNER. */
 export async function requirements(goal: string, model: Scorer, today?: Date): Promise<Part[]> {
   const text = clean(goal, 600);
@@ -101,7 +139,12 @@ export async function requirements(goal: string, model: Scorer, today?: Date): P
     const part = raw.replace(/^[ ,.;:]+|[ ,.;:]+$/g, "");
     if (part.length < 2) continue;
     const lowered = part.toLowerCase();
-    const inPart = [...values].filter((v) => lowered.includes(v)).sort();
+    let inPart = [...values].filter((v) => lowered.includes(v)).sort();
+    // Zipline addition: "to Blazing Bagles Redmond" is one place; GLiNER2 kept
+    // only "bagles redmond". A short "to/from/at/near …" part keeps its whole object.
+    const object = /^(?:from|to|at|near)\s+(.+)$/i.exec(part)?.[1]?.replace(/[.,;:!?]+$/, "").toLowerCase();
+    if (object && inPart.length === 1 && object !== inPart[0] && object.includes(inPart[0]!) &&
+        object.split(/\s+/).length <= 5 && !firstDate(object, today)) inPart = [object];
     parts.push({ text: part, values: inPart, date: resolveDate(part, today) });
   }
   return parts.length ? parts : [{ text, values: [...values].sort(), date: resolveDate(text, today) }];
@@ -513,8 +556,22 @@ async function suggestion(model: Scorer, ordered: Map<string, Group>, history: H
   }
   if (!options.size) return null;
   const typed = clean(last.text, 60);
-  const exact = new Map([...options].filter(([label]) => namesValue(label, typed)));
-  if (exact.size) options = exact;
+  const exact = new Map([...options].filter(([label]) => nearlyNames(label, typed)));
+  if (exact.size) {
+    // Zipline addition: of the suggestions that name what was typed, the one
+    // whose own name adds the least ("Marymoor Park" over "Marymoor Park Playground").
+    // The raw label: cleaning collapses the double space between name and address.
+    const extra = (group: Group) => wordsOf(nameOf(execute(group).label)).length - wordsOf(typed).length;
+    const least = Math.min(...[...exact.values()].map(extra));
+    const closest = [...exact].filter(([, group]) => extra(group) === least);
+    options = exact;
+    if (closest.length === 1) {
+      // Scored like the Python controller, so the confidence matches it when the pick does.
+      const scored = await model.classify(typed, "suggestion", asLabels(options.keys()));
+      return { requirement: null, score: scored[closest[0]![0]] ?? 0, group: closest[0]![1], commits: true };
+    }
+    options = new Map(closest);
+  }
   // Zipline addition: in a search box the typed query is the point; a
   // suggestion that does not contain it ("crunchbase" for a mixer) is not
   // taken, and the query is sent as typed.
@@ -595,14 +652,14 @@ export async function choose(
     requirement = chosen[0]!.requirement;
     covered = requirement != null ? [requirement] : [];
     const last = history[history.length - 1];
-    if (commits && last?.requirement && namesValue(action.label, last.text ?? "")) covered = [last.requirement];
+    if (commits && last?.requirement && nearlyNames(action.label, last.text ?? "")) covered = [last.requirement];
     if (action.kind === "fill") {
       const holding = new Set(parts.filter((p) => p.values.length).map((p) => p.text));
       covered = covered.filter((text) => !holding.has(text));
     } else {
       const unproven = new Set(
         parts
-          .filter((p) => p.values.length && !p.values.every((value) => namesValue(action.label, value)))
+          .filter((p) => p.values.length && !p.values.every((value) => nearlyNames(action.label, value)))
           .map((p) => p.text),
       );
       covered = covered.filter((text) => !unproven.has(text));

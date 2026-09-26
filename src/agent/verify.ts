@@ -5,7 +5,7 @@
 // ("Change ticket type. One way"). GLiNER2 picks the setting out of a part with
 // no value ("one-way ticket") and recognises error, captcha and empty pages;
 // matching is literal, like the controller's.
-import { namesValue, unsentForms, type Part, type Scorer } from "./controller";
+import { nearlyNames, namesValue, unsentForms, type Part, type Scorer } from "./controller";
 import { firstDate } from "./dates";
 import type { Action, HistoryEntry, Page } from "./types";
 
@@ -42,14 +42,14 @@ function evidenceFor(page: Page, part: Part): Check | null {
     return { part: part.text, ok: false, evidence: `no field or label shows ${part.date}` };
   }
   if (!part.values.length) return null;
-  const missing = part.values.filter((value) => !controls.some((a) => shown(a).some((t) => namesValue(t, value))));
+  const missing = part.values.filter((value) => !controls.some((a) => shown(a).some((t) => nearlyNames(t, value))));
   if (!missing.length) {
-    const field = controls.find((a) => a.value && part.values.every((v) => namesValue(a.value!, v)));
+    const field = controls.find((a) => a.value && part.values.every((v) => nearlyNames(a.value!, v)));
     return { part: part.text, ok: true, evidence: field ? `${field.label.trim()}: ${field.value}` : "named on the page" };
   }
   // Without a form, results often name the values in text only ("New York to San Francisco").
   const hasForm = page.actions.some((a) => a.form != null && a.kind === "fill");
-  if (!hasForm && missing.every((value) => namesValue(page.text, value))) return { part: part.text, ok: true, evidence: "in the page text" };
+  if (!hasForm && missing.every((value) => nearlyNames(page.text, value))) return { part: part.text, ok: true, evidence: "in the page text" };
   return { part: part.text, ok: false, evidence: `${missing.join(", ")} not on the page` };
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { choose, type Part } from "../src/agent/controller";
+import { choose, nearlyNames, type Part } from "../src/agent/controller";
 import { searchQuery } from "../src/agent/search";
 import { onSite, siteIn, withoutSite } from "../src/agent/site";
 import type { HistoryEntry, Page } from "../src/agent/types";
@@ -104,5 +104,38 @@ describe("dropdowns", () => {
     const model = { extractEntities: async () => ({}), classify: async (_t: string, _n: string, labels: Record<string, unknown>) => Object.fromEntries(Object.keys(labels).map((l) => [l, scores[l] ?? 0.01])) };
     const decision = await choose(model, page, [], new Map(), new Set(), parts, new Set());
     expect(decision.target).toBe("Search Amazon");
+  });
+});
+
+describe("typos in the goal", () => {
+  it("matches names one or two letters off", () => {
+    expect(nearlyNames("Marymoor Park    West Lake Sammamish Pkwy NE, Redmond, WA", "marmoor park")).toBe(true);
+    expect(nearlyNames("Blazing Bagels Redmond", "blazing bagles redmond")).toBe(true);
+    expect(nearlyNames("Marymoor Park Playground", "marmoor park")).toBe(true);
+    expect(nearlyNames("Seattle", "marmoor park")).toBe(false);
+    expect(nearlyNames("Route 520", "route 250")).toBe(false);
+    expect(nearlyNames("Bay", "bat")).toBe(false);
+  });
+
+  it("takes the suggestion whose name is closest to what was typed", async () => {
+    const page: Page = {
+      url: "https://maps.example.test/", title: "Maps", text: "", marker: 0, page_key: [], guards: {},
+      actions: [
+        { id: "f", kind: "fill", label: "Starting point", role: "combobox", node: 1, document_id: 1, value: "Marmoor Park" },
+        { id: "a", kind: "click", label: "Marymoor Park Playground    Northeast Marymoor Way, Redmond, WA", role: "option", node: 2, document_id: 1, suggestion_for: 1, dialog: true },
+        { id: "b", kind: "click", label: "Marymoor Park    West Lake Sammamish Pkwy NE, Redmond, WA", role: "option", node: 3, document_id: 1, suggestion_for: 1, dialog: true },
+      ],
+    };
+    const history: HistoryEntry[] = [{ action: "Starting point", node: 1, document_id: 1, kind: "fill", text: "Marmoor Park", requirement: "from Marmoor Park" }];
+    const parts: Part[] = [
+      { text: "from Marmoor Park", values: ["marmoor park"], date: null },
+      { text: "to Blazing Bagles Redmond", values: ["blazing bagles redmond"], date: null },
+    ];
+    // The model prefers the playground, as in the real run (0.47).
+    const model = { extractEntities: async () => ({}), classify: async (_t: string, _n: string, labels: Record<string, unknown>) =>
+      Object.fromEntries(Object.keys(labels).map((l) => [l, /Playground/.test(l) ? 0.47 : 0.3])) };
+    const decision = await choose(model, page, history, new Map(), new Set(), parts, new Set());
+    expect(decision.target).toMatch(/^Marymoor Park {4}West Lake/);
+    expect(decision.covered).toEqual(["from Marmoor Park"]);
   });
 });
