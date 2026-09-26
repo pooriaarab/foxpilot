@@ -54,3 +54,75 @@ export function sameDate(label: string, wanted: IsoDate | null | undefined): boo
   const found = firstDate(label);
   return found !== null && found === wanted;
 }
+
+// Zipline addition: dates said the way people say them. Resolved against today
+// in code; GLiNER2 only has to see that "the 1st Friday of next month" is a date.
+const WEEKDAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+const WEEKDAY = "(sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat)(?:day)?";
+const ORDINALS: Record<string, number> = {
+  first: 1, "1st": 1, second: 2, "2nd": 2, third: 3, "3rd": 3, fourth: 4, "4th": 4, fifth: 5, "5th": 5, last: -1,
+};
+const ORDINAL = Object.keys(ORDINALS).join("|");
+const NUMBERS: Record<string, number> = { a: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
+
+const day = (name: string) => WEEKDAYS.indexOf(name.slice(0, 3));
+const at = (year: number, month: number, date: number) => new Date(Date.UTC(year, month, date));
+const isoOf = (d: Date) => iso(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
+
+/** The nth weekday (1-based, -1 for the last) of a month, or null if there is none. */
+function nthWeekday(year: number, month: number, weekday: number, n: number): Date | null {
+  if (n === -1) {
+    const last = at(year, month + 1, 0);
+    return at(year, month, last.getUTCDate() - ((last.getUTCDay() - weekday + 7) % 7));
+  }
+  const first = at(year, month, 1);
+  const date = 1 + ((weekday - first.getUTCDay() + 7) % 7) + (n - 1) * 7;
+  const found = at(year, month, date);
+  return found.getUTCMonth() === month ? found : null;
+}
+
+/**
+ * "tomorrow", "next Friday", "the 1st Friday of next month", "the last Monday
+ * of October", "in 2 weeks". "Next Friday" is the first Friday after today;
+ * "this Friday" can be today.
+ */
+export function relativeDate(text: unknown, today: Date = new Date()): IsoDate | null {
+  const t = String(text ?? "").toLowerCase();
+  const base = at(today.getFullYear(), today.getMonth(), today.getDate());
+  const plus = (days: number) => isoOf(at(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate() + days));
+
+  const nth = new RegExp(`\\b(${ORDINAL})\\s+${WEEKDAY}\\s+(?:of|in)\\s+(?:(this|next)\\s+month|(${MONTH})[a-z]*\\.?(?:,?\\s+(\\d{4}))?)\\b`).exec(t);
+  if (nth) {
+    const [, ordinal, weekday, which, monthName, year] = nth;
+    let y = base.getUTCFullYear();
+    let m = base.getUTCMonth();
+    if (which === "next") m += 1;
+    else if (monthName) {
+      m = MONTHS.indexOf(monthName.slice(0, 3));
+      if (year) y = Number(year);
+      else if (m < base.getUTCMonth()) y += 1;
+    }
+    const found = nthWeekday(at(y, m, 1).getUTCFullYear(), at(y, m, 1).getUTCMonth(), day(weekday!), ORDINALS[ordinal!]!);
+    return found ? isoOf(found) : null;
+  }
+  if (/\bday after tomorrow\b/.test(t)) return plus(2);
+  if (/\btomorrow\b/.test(t)) return plus(1);
+  if (/\b(today|tonight)\b/.test(t)) return plus(0);
+  const later = /\bin\s+(\d+|a|one|two|three|four|five|six|seven|eight|nine|ten)\s+(day|week)s?\b/.exec(t);
+  if (later) {
+    const n = NUMBERS[later[1]!] ?? Number(later[1]);
+    return plus(later[2] === "week" ? n * 7 : n);
+  }
+  // Full names only: "Sun Valley" and "Sat" are not dates.
+  const named = /\b(?:(this|next|coming)\s+)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/.exec(t);
+  if (named) {
+    const ahead = (day(named[2]!) - base.getUTCDay() + 7) % 7;
+    return plus(named[1] === "this" ? ahead : ahead || 7);
+  }
+  return null;
+}
+
+/** A calendar date if the text has one, otherwise a relative one. */
+export function resolveDate(text: unknown, today: Date = new Date()): IsoDate | null {
+  return firstDate(text, today) ?? relativeDate(text, today);
+}

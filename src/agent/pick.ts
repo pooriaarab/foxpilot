@@ -21,7 +21,7 @@ export function qualifiers(goal: string): Qualifiers | null {
   else if (/\b(most expensive|priciest|highest[- ]priced?)\b/.test(g)) q.order = "price-desc";
   else if (/\b(fastest|shortest|quickest)\b/.test(g)) q.order = "duration-asc";
   else if (/\bearliest\b/.test(g)) q.order = "depart-asc";
-  else if (/\b(latest|last)\b/.test(g)) q.order = "depart-desc";
+  else if (/\blatest\b|\blast\b(?!\s+(?:sun|mon|tue|wed|thu|fri|sat|week|month|year|day))/.test(g)) q.order = "depart-desc";
   for (const [name, window] of Object.entries(WINDOWS)) {
     if (new RegExp(`\\b${name}\\b`).test(g)) {
       q.window = window;

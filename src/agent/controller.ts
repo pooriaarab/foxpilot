@@ -3,7 +3,7 @@
 // progress, dates and supported operations; the model supplies entity spans
 // and control scores. Function names follow the Python so the two read side
 // by side; tests/controller.test.ts checks the decisions match it.
-import { firstDate, sameDate, type IsoDate } from "./dates";
+import { firstDate, resolveDate, sameDate, type IsoDate } from "./dates";
 import type { Action, HistoryEntry, Page } from "./types";
 import { isSearchField } from "./search";
 
@@ -102,9 +102,9 @@ export async function requirements(goal: string, model: Scorer, today?: Date): P
     if (part.length < 2) continue;
     const lowered = part.toLowerCase();
     const inPart = [...values].filter((v) => lowered.includes(v)).sort();
-    parts.push({ text: part, values: inPart, date: firstDate(part, today) });
+    parts.push({ text: part, values: inPart, date: resolveDate(part, today) });
   }
-  return parts.length ? parts : [{ text, values: [...values].sort(), date: firstDate(text, today) }];
+  return parts.length ? parts : [{ text, values: [...values].sort(), date: resolveDate(text, today) }];
 }
 
 /** Check execution history and current field values for an already-served control. */
@@ -130,7 +130,7 @@ const OPTION_ROLES = new Set(["option", "menuitemradio", "menuitemcheckbox", "ra
  * never chosen (they stay in the label set, so scores match the Python controller). A run once clicked "Track prices…" and left a tracked flight
  * behind; a browsing agent should not sign in, subscribe, buy or delete.
  */
-const UNSAFE = /\b(track prices?|sign (in|out|up)|log ?(in|out)|subscribe|unsubscribe|delete|remove account|buy now|purchase|pay now|place order|checkout)\b/i;
+const UNSAFE = /\b(track prices?|sign (in|out|up)|log ?(in|out)|subscribe|unsubscribe|delete|remove account|buy now|purchase|pay now|place order|checkout|book now|book with|reserve now|continue to book(ing)?)\b/i;
 
 export function isUnsafe(action: Action): boolean {
   return UNSAFE.test(action.label);
