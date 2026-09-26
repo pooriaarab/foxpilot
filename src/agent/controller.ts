@@ -552,11 +552,17 @@ export async function choose(
   allParts: Part[], served: Set<string>,
 ): Promise<Decision> {
   const parts = allParts.filter((p) => !served.has(p.text));
-  const { ordered, results: scores, latency } = await match(model, state, history, refused, memory, parts);
+  // Zipline addition: dates are resolved and matched in code. When an open
+  // picker already shows the wanted day, scoring every part against 50 day
+  // labels only to ignore the scores cost 1.3–3 s per step on Google Flights.
+  const picked = parts.some((p) => p.date) ? best(groups(state, history, refused), new Map(), parts) : [];
+  const { ordered, results: scores, latency } = picked.length
+    ? { ordered: groups(state, history, refused), results: new Map() as Scores, latency: 0 }
+    : await match(model, state, history, refused, memory, parts);
   let chosen = best(ordered, scores, parts);
   const sending = await unsentForm(model, state, ordered, history, chosen);
   if (sending) chosen = [sending, ...chosen];
-  const committing = await suggestion(model, ordered, history);
+  const committing = picked.length ? null : await suggestion(model, ordered, history);
   chosen = committing ? [committing] : ((await dialog(model, ordered, chosen)) ?? chosen);
   const commits = Boolean(committing);
   if (!chosen.length) {

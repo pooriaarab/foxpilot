@@ -79,4 +79,15 @@ describe.skipIf(!have)("controller vs Python", () => {
     expect(parts.find((p) => p.date)).toMatchObject({ text: "on the 1st Friday of next month", date: "2026-10-02" });
     expect(parts.map((p) => p.values).flat()).toEqual(expect.arrayContaining(["new york", "san francisco"]));
   }, 60_000);
+
+  // Zipline addition: with the calendar open on the wanted day, the date is
+  // matched in code and GLiNER2 is not called at all.
+  it("clicks the wanted day in an open calendar without model calls", async () => {
+    const state = (JSON.parse(readFileSync(`${ROOT}tests/fixtures/flights-calendar.json`, "utf8")) as { state: Page }).state;
+    const parts = await requirements("Find a one-way ticket from New York to San Francisco on the 1st Friday of next month", model, new Date(2026, 8, 25));
+    const served = new Set(parts.filter((p) => !p.date).map((p) => p.text));
+    const refuse = () => { throw new Error("model called"); };
+    const decision = await choose({ extractEntities: refuse, classify: refuse }, state, [], new Map(), new Set(), parts, served);
+    expect(decision.target).toBe("Friday, October 2, 2026 , 275 US dollars");
+  }, 60_000);
 });
