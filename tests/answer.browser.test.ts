@@ -43,6 +43,17 @@ describe.skipIf(!have)("answer highlight on fixtures", () => {
     expect(lastRows.find((r) => r.text.includes("at 6:00 AM"))).toMatchObject({ price: 388, depart: 360, duration: 374 });
   }, 120_000);
 
+  it("takes the site's first result when the goal has no preference", async () => {
+    await page.goto("http://localhost:5403/flights.html");
+    const answer = await findAnswer(adapter(), model, "Find a one-way ticket from New York to San Francisco on October 9, 2026.");
+    expect(answer?.label).toMatch(/^Top result · \$\d+$/);
+    const first = await page.evaluate(() => {
+      const rows = [...document.querySelectorAll("li")].filter((e) => /\$\d/.test(e.innerText) && /\d:\d\d/.test(e.innerText));
+      return rows[0]?.innerText.replace(/\s+/g, " ").trim().slice(0, 30);
+    });
+    expect(answer?.text.startsWith(first!)).toBe(true);
+  }, 120_000);
+
   it("picks the cheapest overall without a time window", async () => {
     await page.goto("http://localhost:5403/flights.html");
     const answer = await findAnswer(adapter(), model, "cheapest flight from New York to San Francisco");

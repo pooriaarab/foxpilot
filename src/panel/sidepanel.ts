@@ -291,7 +291,7 @@ async function run() {
     let verdict: Verdict | null = null;
     if (view.status === "done") {
       $("clock-sub").textContent = "Checking the page against the goal…";
-      verdict = await verify(gliner, await browser.observe(), view.parts, view.history).catch((error) => {
+      verdict = view.verdict ?? await verify(gliner, await browser.observe(), view.parts, view.history).catch((error) => {
         console.error("verify failed", error);
         return null;
       });

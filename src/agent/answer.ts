@@ -126,7 +126,7 @@ async function pickRow(browser: TabBrowser, model: Scorer, goal: string): Promis
       text: block.text,
       price:
         parseMoney(found.price?.[0]?.text) ??
-        parseMoney(block.text.match(/[$€£¥₹]\s?[\d,]+(?:\.\d+)?|[\d,]+(?:\.\d+)?\s?(?:US dollars|USD|dollars)/i)?.[0]),
+        parseMoney(block.text.match(PRICE)?.[0]),
       // Spans come ordered by confidence; the departure is the earliest time in the row.
       depart: parseClock(earliest(found.time)?.text) ?? parseClock(block.text),
       // Durations have a fixed shape ("6 hr 14 min"); GLiNER's span can stop at "6 hr".
@@ -143,6 +143,25 @@ async function pickRow(browser: TabBrowser, model: Scorer, goal: string): Promis
   const label = describe(q, row);
   await browser.evaluate(HIGHLIGHT(row.i, `✦ ${label}`));
   return { text: row.text, score: 1, label };
+}
+
+const PRICE = /[$€£¥₹]\s?[\d,]+(?:\.\d+)?|[\d,]+(?:\.\d+)?\s?(?:US dollars|USD|dollars)/i;
+
+/**
+ * A goal without preferences on a page of results (three or more rows, each
+ * with a price and a time, like flights): the page's own first result is the
+ * answer, in the order the site ranked them. Anything else goes to the card
+ * search below.
+ */
+async function topRow(browser: TabBrowser): Promise<Answer | null> {
+  const collected = await browser.evaluate<{ rows: { i: number; text: string }[] }>(COLLECT_ROWS);
+  const rows = (collected?.rows ?? []).filter((r) => parseClock(r.text) !== undefined && PRICE.test(r.text));
+  if (rows.length < 3) return null;
+  const first = rows[0]!;
+  const price = parseMoney(first.text.match(PRICE)?.[0]);
+  const label = price !== undefined ? `Top result · $${price}` : "Top result";
+  await browser.evaluate(HIGHLIGHT(first.i, `✦ ${label}`));
+  return { text: first.text, score: 1, label };
 }
 
 function earliest<T extends { start?: number }>(spans: T[] | undefined): T | undefined {
@@ -174,6 +193,8 @@ export async function findAnswer(browser: TabBrowser, model: Scorer, goal: strin
   // A goal with preferences ("cheapest", "red-eye") wants one of the results;
   // some other card on the page is not an answer to it.
   if (qualifiers(goal)) return null;
+  const listed = await topRow(browser);
+  if (listed) return listed;
   const blocks = await browser.evaluate<{ i: number; text: string }[]>(COLLECT);
   if (!blocks?.length) return null;
   // Naming what an answer card is, and what the other blocks are, matters: with

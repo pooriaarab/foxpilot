@@ -143,7 +143,7 @@ export function isUnsafe(action: Action): boolean {
  */
 const SENDS = /^(search|submit|go|send|find)$/i;
 
-function sends(action: Action): boolean {
+export function sends(action: Action): boolean {
   return action.kind === "click" && !action.dialog && SENDS.test(clean(action.label));
 }
 

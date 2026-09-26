@@ -1,12 +1,13 @@
 // Port of gliner2-ultrafast agent.py (MIT): the agent loop. Observe, choose,
 // act, record; typed choices, observable state, bounded execution.
 import { TabBrowser, StalePage } from "./browser";
-import { choose, requirements, type Decision, type Memory, type Part, type Scorer } from "./controller";
+import { choose, requirements, sends, type Decision, type Memory, type Part, type Scorer } from "./controller";
 import { firstDate, normalise } from "./dates";
 import { Refused, type FieldContext, type FieldWriter } from "./fieldtext";
 import { searchQuery } from "./search";
 import { stripQualifiers } from "./pick";
 import type { Action, HistoryEntry, Page } from "./types";
+import { verify, type Verdict } from "./verify";
 
 export const MAX_STEPS = 60;
 /** Consecutive decisions that reach no execution before the run is called stuck. */
@@ -36,6 +37,8 @@ export type AgentView = {
   elapsedMs: number;
   modelMs: number;
   message?: string;
+  /** The finished page checked against the goal (set when the run ends early on it). */
+  verdict?: Verdict;
   /** Every decision with the page's actions, for debugging. */
   decisions?: (Decision & { served: string[]; actions: string[] })[];
 };
@@ -81,6 +84,13 @@ function completedDates(parts: Part[], page: Page, history: HistoryEntry[]): Set
     }
   }
   return completed;
+}
+
+const SETTLE_MS = 1000;
+
+/** A step that sent a form: a real submit, Enter, or a click on its Search button. */
+function sent(entry: Step): boolean {
+  return Boolean(entry.submit) || (entry.kind === "click" && sends({ kind: "click", label: entry.action } as Action));
 }
 
 export class Agent {
@@ -289,5 +299,21 @@ export class Agent {
     this.view.status =
       repeated.length === 3 && repeated.every((h) => h.pageChanged === false && h.kind !== "wait") ? "blocked" : "ready";
     if (this.view.status === "blocked") this.view.message = "Three actions in a row changed nothing";
+    else if (entry.pageChanged && sent(entry) && this.parts.every((p) => this.served.has(p.text))) await this.finishIfVerified();
+  }
+
+  /**
+   * Zipline addition: the Python loop ends after two waits and two scrolls find
+   * nothing left to do (2–4 s on Google Flights). Once every part is served and
+   * the form was just sent, the finished page is checked instead; if it shows
+   * the goal, the run ends there. Results get a second to load first.
+   */
+  private async finishIfVerified() {
+    await new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
+    this.page = await this.browser.observe();
+    const verdict = await verify(this.model, this.page, this.parts, this.view.history);
+    if (!verdict.verified) return;
+    this.view.verdict = verdict;
+    this.view.status = "done";
   }
 }
