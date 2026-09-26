@@ -6,6 +6,7 @@ import { TabBrowser } from "../agent/browser";
 import { CLEAR, findAnswer, lastNote, lastRows, lastScores } from "../agent/answer";
 import { LlmWriter, SpanWriter, type FieldWriter } from "../agent/fieldtext";
 import { verify, type Verdict } from "../agent/verify";
+import { onSite, siteIn, withoutSite } from "../agent/site";
 import { Gliner2 } from "../model/gliner2";
 import { TabGroupStatus } from "./tabgroup";
 
@@ -271,14 +272,30 @@ async function run() {
     $("elapsed").textContent = `${((performance.now() - started) / 1000).toFixed(1)} s`;
   }, 100);
   try {
+    // A goal that names a site ("… on amazon.com") starts on that site; the
+    // rest of the goal is what to do there.
+    const site = siteIn(goal);
+    let task = goal;
+    let opened = false;
+    if (site) {
+      const tab = await chrome.tabs.get(tabId);
+      if (!onSite(tab.url ?? "", site)) {
+        $("clock-sub").textContent = `Opening ${site.host}…`;
+        await navigateAndWait(tabId, site.url);
+        opened = true;
+      }
+      task = withoutSite(goal, site) || goal;
+    }
+    Object.assign(window, { __ziplineSite: site ? { ...site, opened } : null });
     browser = await attachOrOpenStart(tabId);
+    if (opened) await browser.waitForLoad();
     const setup = performance.now();
     await browser.evaluate(CLEAR).catch(() => {});
     const useLlm = llmToggle.checked && llm && llmReady;
     running = await Agent.create(
       gliner,
       browser,
-      goal,
+      task,
       (parts, found): FieldWriter => (useLlm ? llm! : new SpanWriter(parts, found)),
       (view) => {
         render(view);
@@ -363,10 +380,12 @@ for (const example of EXAMPLES) {
 function runLog(): string {
   const view = (window as unknown as { __zipline?: AgentView }).__zipline;
   const answer = (window as unknown as { __ziplineAnswer?: unknown }).__ziplineAnswer;
+  const site = (window as unknown as { __ziplineSite?: { host: string; opened: boolean } | null }).__ziplineSite;
   if (!view) return "No run yet.";
   const lines = [
     `Zipline run · ${new Date().toISOString()}`,
     `Goal: ${view.goal}`,
+    ...(site ? [`Site: ${site.host} (${site.opened ? "opened first" : "already there"})`] : []),
     `Requirements: ${view.parts.map((p) => `"${p.text}"${p.values.length ? ` [${p.values.join(", ")}]` : ""}`).join(" · ")}`,
     `Status: ${view.status}${view.message ? ` (${view.message})` : ""} · ${(view.elapsedMs / 1000).toFixed(1)} s`,
     "",
