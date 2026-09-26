@@ -13,6 +13,8 @@ It is a port of [gliner2-ultrafast](https://github.com/sahibzada-allahyar/gliner
 - **Chrome acts.** The page is read with the original `snapshot.js`, and clicks and typing are sent through `chrome.debugger` with the same DevTools Protocol calls the Python version sends. Before every action it checks the page has not changed since the decision.
 - **Field text, two ways.** By default it types the value GLiNER extracted for that part of the goal. Switch on *Local LLM* and Qwen3-0.6B (WebGPU, about 0.5 GB) writes the value instead, from the goal, the requirement and GLiNER's candidates.
 
+**Checked, not assumed.** "Done" only means the controller found nothing left to do. Afterwards Zipline checks the finished page against each part of the goal and shows a checklist: a form field holding each value ("Where from?: New York", "Departure: Fri, Oct 9"), a control showing each setting (GLiNER2 picks "one-way ticket" out of the goal; the page shows "Change ticket type. One way"), the form actually sent, and not an error, empty or captcha page. The page's own form counts over cards beside it that name the same words. The answer is highlighted only on a verified page. It checks what the page's form says, not whether the results below it match.
+
 The tab being driven goes into a **Zipline** tab group whose title shows the run: ⚡ step N, ✅ done with the time, ⛔ blocked.
 
 ## Try it
@@ -31,6 +33,7 @@ Chrome shows a "started debugging this browser" bar while Zipline drives a tab; 
 ## Verification
 
 - `tests/parity.test.ts`: the JavaScript GLiNER2 runtime reproduces the Python library's token ids and outputs on 14 recorded calls (fp32 and fp16).
+- `tests/verify.test.ts`: the goal check passes a sent, complete form and fails a Round-trip form beside "One way trip from New York…" cards, a form never sent and a captcha page.
 - `tests/controller.test.ts`: the TypeScript controller makes the same decisions as the Python controller on captured Google Flights and Maps pages (`tests/oracle.py` produces the reference).
 - `scripts/e2e.mjs [flights|maps|walking] [--llm]`: runs a task end to end in Playwright's Chromium.
 - `scripts/record-demo.mjs`: records the page and the panel side by side in real time.

@@ -435,17 +435,20 @@ function sentKey(entry: { form?: unknown; action?: string }): string {
   return JSON.stringify(entry.form != null ? entry.form : ["field", entry.action]);
 }
 
-/** Find a submission action for a populated, uncommitted form. */
-async function unsentForm(
-  model: Scorer, state: Page, ordered: Map<string, Group>, history: HistoryEntry[], chosen: Chosen[],
-): Promise<Chosen | null> {
-  // Zipline addition: order matters. A field filled after its form was sent
-  // makes the form unsent again (Python treats a form as sent once, forever).
+/**
+ * Forms (or lone fields) holding values that were typed but not sent yet.
+ * Zipline addition: order matters. A field filled after its form was sent
+ * makes the form unsent again (Python treats a form as sent once, forever).
+ */
+export function unsentForms(state: Page, history: HistoryEntry[]): Set<string> {
   const filledAt = new Map<string, number>();
   const sentAt = new Map<string, number>();
   history.forEach((e, index) => {
-    if (e.kind === "fill") filledAt.set(sentKey(e), index);
-    if (e.submit) sentAt.set(sentKey(e), index);
+    const sending = e.submit || (e.kind === "click" && e.form != null && SENDS.test(clean(e.action)));
+    // Choosing a setting in the form (ticket type) changes what a search would send.
+    if (e.kind === "fill" || (e.kind === "click" && e.form != null && !sending)) filledAt.set(sentKey(e), index);
+    // A click on the form's Search button sends it too, on pages without a real <form>.
+    if (sending) sentAt.set(sentKey(e), index);
     if (e.committed_field) sentAt.set(JSON.stringify(["field", e.committed_field]), index);
   });
   const holding = new Set(
@@ -454,6 +457,14 @@ async function unsentForm(
   const pending = new Set(
     [...filledAt].filter(([k, at]) => at > (sentAt.get(k) ?? -1) && holding.has(k)).map(([k]) => k),
   );
+  return pending;
+}
+
+/** Find a submission action for a populated, uncommitted form. */
+async function unsentForm(
+  model: Scorer, state: Page, ordered: Map<string, Group>, history: HistoryEntry[], chosen: Chosen[],
+): Promise<Chosen | null> {
+  const pending = unsentForms(state, history);
   if (!pending.size) return null;
   const inPending = (form: unknown) => form != null && pending.has(JSON.stringify(form));
   for (const group of ordered.values()) {

@@ -393,6 +393,54 @@ textarea:focus {
   color: var(--muted);
 }
 
+.verdict {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  font-size: 12px;
+}
+
+.verdict strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.verdict.ok strong {
+  color: var(--accent);
+}
+
+.verdict.bad strong {
+  color: var(--bad);
+}
+
+.verdict ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+}
+
+.verdict li {
+  display: flex;
+  flex-direction: column;
+}
+
+.verdict li.bad > span,
+.verdict li.bad:not(:has(span)) {
+  color: var(--bad);
+}
+
+.verdict em {
+  color: var(--muted);
+  font-style: normal;
+  font-size: 11px;
+  padding-left: 14px;
+  overflow-wrap: anywhere;
+}
+
 .copy-log {
   margin-top: 8px;
   padding: 5px 10px;

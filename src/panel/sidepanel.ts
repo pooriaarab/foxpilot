@@ -5,6 +5,7 @@ import { Agent, type AgentView, type Step } from "../agent/agent";
 import { TabBrowser } from "../agent/browser";
 import { CLEAR, findAnswer, lastNote, lastRows, lastScores } from "../agent/answer";
 import { LlmWriter, SpanWriter, type FieldWriter } from "../agent/fieldtext";
+import { verify, type Verdict } from "../agent/verify";
 import { Gliner2 } from "../model/gliner2";
 import { TabGroupStatus } from "./tabgroup";
 
@@ -216,6 +217,28 @@ function showAnswer(text: string, score: number, label?: string) {
   log.scrollTop = log.scrollHeight;
 }
 
+/** The goal, part by part, checked against the finished page. */
+function showVerdict(verdict: Verdict) {
+  const box = document.createElement("div");
+  box.className = `verdict ${verdict.verified ? "ok" : "bad"}`;
+  box.append(Object.assign(document.createElement("strong"), {
+    textContent: verdict.verified ? "✓ Verified on the page" : "⚠ Not verified: check the page",
+  }));
+  const list = document.createElement("ul");
+  for (const check of verdict.checks) {
+    const item = document.createElement("li");
+    item.className = check.ok ? "ok" : "bad";
+    item.append(
+      Object.assign(document.createElement("span"), { textContent: `${check.ok ? "✓" : "✗"} ${check.part}` }),
+      Object.assign(document.createElement("em"), { textContent: check.evidence }),
+    );
+    list.append(item);
+  }
+  if (verdict.problem) list.append(Object.assign(document.createElement("li"), { className: "bad", textContent: `✗ ${verdict.problem}` }));
+  box.append(list);
+  $("result").after(box);
+}
+
 function showNote(text: string) {
   const box = document.createElement("div");
   box.className = "answer note";
@@ -234,7 +257,7 @@ async function run() {
   if (tabId === undefined) return;
   $("steps").replaceChildren();
   $("result").hidden = true;
-  document.querySelector(".answer")?.remove();
+  document.querySelectorAll(".answer, .verdict").forEach((e) => e.remove());
   runButton.textContent = "Stop";
   runButton.classList.add("stop");
   runButton.disabled = false;
@@ -265,7 +288,22 @@ async function run() {
     const loopEnd = performance.now();
     render(view);
     await status.update(view);
+    let verdict: Verdict | null = null;
     if (view.status === "done") {
+      $("clock-sub").textContent = "Checking the page against the goal…";
+      verdict = await verify(gliner, await browser.observe(), view.parts, view.history).catch((error) => {
+        console.error("verify failed", error);
+        return null;
+      });
+      (window as unknown as { __ziplineVerdict: unknown }).__ziplineVerdict = verdict;
+    }
+    const checked = performance.now();
+    if (view.status === "done" && verdict && !verdict.verified) {
+      // Highlighting a "cheapest" row on a page that never reached the goal
+      // (the form, a promo) looks like an answer and is not one.
+      render(view);
+      showVerdict(verdict);
+    } else if (view.status === "done") {
       $("clock-sub").textContent = "Looking for the answer on the page…";
       let failure = "";
       const answer = await findAnswer(browser, gliner, goal).catch((error) => {
@@ -277,6 +315,7 @@ async function run() {
       render(view);
       if (answer) showAnswer(answer.text, answer.score, answer.label);
       else showNote(failure ? `Answer search failed: ${failure}` : lastNote || "Nothing on the page stood out as the answer.");
+      if (verdict) showVerdict(verdict);
     }
     // The big clock is wall time from Run, the same clock that ticked while it ran.
     // Below it, where the time went: the loop's own timer leaves out attaching,
@@ -287,7 +326,7 @@ async function run() {
       `${secs(loopStart - setup)} reading goal`,
       `${secs(loopEnd - loopStart)} on the page`,
     ];
-    if (view.status === "done") parts.push(`${secs(performance.now() - loopEnd)} finding answer`);
+    if (view.status === "done") parts.push(`${secs(checked - loopEnd)} checking`, `${secs(performance.now() - checked)} finding answer`);
     $("elapsed").textContent = secs(performance.now() - started);
     $("clock-sub").textContent = parts.join(" · ");
   } catch (error) {
@@ -340,6 +379,7 @@ function runLog(): string {
     ),
     "",
     `Text writer calls: ${JSON.stringify(view.textCalls)}`,
+    `Verdict: ${JSON.stringify((window as unknown as { __ziplineVerdict?: unknown }).__ziplineVerdict ?? null)}`,
     `Answer step: ${JSON.stringify(answer ?? null).slice(0, 1500)}`,
   ];
   return lines.join("\n");
