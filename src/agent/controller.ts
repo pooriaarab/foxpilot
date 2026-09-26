@@ -506,6 +506,13 @@ async function suggestion(model: Scorer, ordered: Map<string, Group>, history: H
   const typed = clean(last.text, 60);
   const exact = new Map([...options].filter(([label]) => namesValue(label, typed)));
   if (exact.size) options = exact;
+  // Zipline addition: in a search box the typed query is the point; a
+  // suggestion that does not contain it ("crunchbase" for a mixer) is not
+  // taken, and the query is sent as typed.
+  else {
+    const field = ordered.get(JSON.stringify([last.node ?? null, null]));
+    if (isSearchField({ label: last.action, role: field ? execute(field).role : undefined })) return null;
+  }
   const [picked, confidence] = top(await model.classify(typed, "suggestion", asLabels(options.keys())));
   return { requirement: null, score: confidence, group: options.get(picked)!, commits: true };
 }
