@@ -33,6 +33,9 @@ describe("search queries", () => {
     ["show me the weather in Seattle", "weather in Seattle"],
     ["Search Wikipedia for the Golden Gate Bridge.", "the Golden Gate Bridge"],
     ["weather seattle", "weather seattle"],
+    ["find me cheapest kitchenaid mixer", "kitchenaid mixer"],
+    ["the cheapest flights to Paris", "flights to Paris"],
+    ["latest news on the election", "latest news on the election"],
   ])("%s → %s", (goal, query) => {
     expect(searchQuery(goal)).toBe(query);
   });
@@ -65,5 +68,23 @@ describe("autocomplete in a search box", () => {
   it("takes one that contains it", async () => {
     const decision = await choose(model, page(["crunchbase", "kitchenaid mixer attachments"]), history, new Map(), new Set(), parts, new Set(parts.map((p) => p.text)));
     expect(decision.target).toBe("kitchenaid mixer attachments");
+  });
+});
+
+describe("popups while typing", () => {
+  it("does not 'confirm' an autocomplete popup's buttons", async () => {
+    const page: Page = {
+      url: "https://example.test/", title: "Search", text: "", marker: 0, page_key: [], guards: {},
+      actions: [
+        { id: "e1", kind: "fill", label: "Search Amazon", role: "searchbox", node: 1, document_id: 1, value: "kitchenaid mixer" },
+        { id: "a", kind: "click", label: "Ask Alexa about this", role: "button", node: 5, document_id: 1, dialog: true },
+        { id: "k", kind: "key", label: "Press Enter to submit the focused field" },
+      ],
+    };
+    const history: HistoryEntry[] = [{ action: "Search Amazon", node: 1, document_id: 1, kind: "fill", text: "kitchenaid mixer" }];
+    const parts: Part[] = [{ text: "kitchenaid mixer", values: ["kitchenaid mixer"], date: null }];
+    const model = { extractEntities: async () => ({}), classify: async (_t: string, _n: string, labels: Record<string, unknown>) => Object.fromEntries(Object.keys(labels).map((l) => [l, 0.92])) };
+    const decision = await choose(model, page, history, new Map(), new Set(), parts, new Set(["kitchenaid mixer"]));
+    expect(decision.target).not.toBe("Ask Alexa about this");
   });
 });

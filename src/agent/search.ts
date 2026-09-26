@@ -14,6 +14,10 @@ export function searchQuery(goal: string): string {
     .replace(/^(?:please\s+)?(?:find|get|show|buy)\s+me\s+(?:(?:a|an|the|some)\s+)?/i, "")
     // "… on amazon.com": the site is where to search, not what to search for.
     .replace(/\s+(?:on|at|from|in|via)\s+(?:https?:\/\/)?(?:[a-z0-9-]+\.)+[a-z]{2,}\b\S*$/i, "")
+    // Price preferences pick among the results; typed into the box they only
+    // add noise ("cheapest kitchenaid mixer"). Other words like "latest" stay.
+    .replace(/\b(?:the\s+)?(?:cheapest|cheaper|cheap|budget|inexpensive|affordable|lowest[- ]priced?|least expensive|most expensive|priciest)\b\s*/gi, "")
     .replace(/[.!]+$/, "")
+    .replace(/\s{2,}/g, " ")
     .trim();
 }
