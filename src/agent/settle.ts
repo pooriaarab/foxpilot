@@ -11,8 +11,10 @@ export const SETTLE = `(action => new Promise(resolve => {
   // Zipline addition: a button inside a picker ("Done") closes it; the page is
   // read once it has gone, not mid-animation (a fading calendar was scored at 2 s).
   const dialogRoot=field?.closest('dialog,[role="dialog"],[role="alertdialog"],[aria-modal="true"]');
+  // A day in a calendar grid or an option in a list keeps the picker open.
   const closing=action.kind==='click' && !!dialogRoot && !menu &&
-    !['gridcell','option','menuitem','menuitemradio','tab'].includes(field.getAttribute('role')||'');
+    !['gridcell','option','menuitem','menuitemradio','tab'].includes(field.getAttribute('role')||'') &&
+    !field.closest('[role="grid"],[role="listbox"],[role="menu"],[role="tablist"],table');
   const gone=()=>!dialogRoot.isConnected || !dialogRoot.checkVisibility({checkOpacity:true,checkVisibilityCSS:true}) ||
     parseFloat(getComputedStyle(dialogRoot).opacity)<0.05;
   let frames=0, stopped=false; const started=performance.now();
@@ -21,7 +23,11 @@ export const SETTLE = `(action => new Promise(resolve => {
   const ready=()=>{
     if (stopped) return;
     const ids=(field?.getAttribute('aria-controls')||field?.getAttribute('aria-owns')||'').split(/\\s+/).filter(Boolean);
-    const roots=ids.length ? ids.map(id=>document.getElementById(id)).filter(Boolean) : [document];
+    const linked=ids.map(id=>document.getElementById(id)).filter(Boolean);
+    // aria-controls can name an element that never holds the options (Google
+    // Flights' ticket type); a menu then shows them in a listbox or menu elsewhere.
+    const roots=linked.length ? linked : [document];
+    if (menu && linked.length) roots.push(...document.querySelectorAll('[role="listbox"],[role="menu"]'));
     const options=roots.flatMap(root=>[...root.querySelectorAll('[role="option"],[role="gridcell"],[role="menuitem"],[role="menuitemradio"]')]);
     if (++frames>=2 && closing) { if (gone()) finish(); else requestAnimationFrame(ready); return; }
     if (frames>=2 && (autocomplete || menu ? options.some(e=>{

@@ -126,6 +126,17 @@ async function pickRow(browser: TabBrowser, model: Scorer, goal: string): Promis
   }
   const rows: Row[] = [];
   for (const block of blocks) {
+    // Most result rows show a time range ("9:00 PM – 12:34 AM") and a price;
+    // those are read by pattern. GLiNER2 reads the rest (1.7 s → ~0.3 s on Flights).
+    const range = RANGE.exec(block.text);
+    const priced = block.text.match(PRICE)?.[0];
+    if (range && priced) {
+      rows.push({
+        i: block.i, text: block.text, price: parseMoney(priced), depart: parseClock(range[1]),
+        duration: parseDuration(block.text.match(DURATION)?.[0]), nonstop: NONSTOP.test(block.text),
+      });
+      continue;
+    }
     const found = await model.extractEntities(block.text.slice(0, 500), ROW_TYPES);
     rows.push({
       i: block.i,
@@ -136,8 +147,8 @@ async function pickRow(browser: TabBrowser, model: Scorer, goal: string): Promis
       // Spans come ordered by confidence; the departure is the earliest time in the row.
       depart: parseClock(earliest(found.time)?.text) ?? parseClock(block.text),
       // Durations have a fixed shape ("6 hr 14 min"); GLiNER's span can stop at "6 hr".
-      duration: parseDuration(block.text.match(/\d+\s*h(?:r|ours?)?(?:\s*\d+\s*m(?:in)?)?|\d+\s*min\b/i)?.[0]) ?? parseDuration(found.duration?.[0]?.text),
-      nonstop: /\b(nonstop|non-stop|direct)\b/i.test(block.text),
+      duration: parseDuration(block.text.match(DURATION)?.[0]) ?? parseDuration(found.duration?.[0]?.text),
+      nonstop: NONSTOP.test(block.text),
     });
   }
   lastRows = rows;
@@ -151,6 +162,9 @@ async function pickRow(browser: TabBrowser, model: Scorer, goal: string): Promis
   return { text: row.text, score: 1, label };
 }
 
+const RANGE = /(\d{1,2}:\d{2}\s?[AP]M)\s*[–—-]\s*\d{1,2}:\d{2}\s?[AP]M/i;
+const DURATION = /\d+\s*h(?:r|ours?)?(?:\s*\d+\s*m(?:in)?)?|\d+\s*min\b/i;
+const NONSTOP = /\b(nonstop|non-stop|direct)\b/i;
 const PRICE = /[$€£¥₹]\s?[\d,]+(?:\.\d+)?|[\d,]+(?:\.\d+)?\s?(?:US dollars|USD|dollars)/i;
 
 /**
