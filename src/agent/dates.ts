@@ -45,7 +45,8 @@ export function firstDate(text: unknown, today: Date = new Date()): IsoDate | nu
 /** The typed value in ISO form, when it is the date the task asked for. */
 export function normalise(typed: string, wanted: IsoDate | null | undefined): string {
   if (!wanted) return typed;
-  return firstDate(typed) === wanted ? wanted : typed;
+  // Zipline: a writer may echo the goal's words ("1st Friday of next month").
+  return resolveDate(typed) === wanted ? wanted : typed;
 }
 
 /** Does this control's name mean exactly the date the task asked for? */
