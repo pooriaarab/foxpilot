@@ -299,12 +299,15 @@ export class Agent {
     this.view.status =
       repeated.length === 3 && repeated.every((h) => h.pageChanged === false && h.kind !== "wait") ? "blocked" : "ready";
     if (this.view.status === "blocked") this.view.message = "Three actions in a row changed nothing";
-    else if (entry.pageChanged && sent(entry) && this.parts.every((p) => this.served.has(p.text))) await this.finishIfVerified();
+    // Parts without a value ("Book me a flight") are left to the page check.
+    else if (entry.pageChanged && sent(entry) && this.parts.every((p) => this.served.has(p.text) || (!p.values.length && !p.date))) {
+      await this.finishIfVerified();
+    }
   }
 
   /**
    * Zipline addition: the Python loop ends after two waits and two scrolls find
-   * nothing left to do (2–4 s on Google Flights). Once every part is served and
+   * nothing left to do (2–4 s on Google Flights). Once every value is entered and
    * the form was just sent, the finished page is checked instead; if it shows
    * the goal, the run ends there. Results get a second to load first.
    */

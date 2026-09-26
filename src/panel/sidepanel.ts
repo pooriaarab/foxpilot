@@ -258,6 +258,8 @@ async function run() {
   $("steps").replaceChildren();
   $("result").hidden = true;
   document.querySelectorAll(".answer, .verdict").forEach((e) => e.remove());
+  // The run log reads these; a run that stops before the answer step must not show the last run's.
+  Object.assign(window, { __ziplineAnswer: null, __ziplineVerdict: null });
   runButton.textContent = "Stop";
   runButton.classList.add("stop");
   runButton.disabled = false;

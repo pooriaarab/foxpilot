@@ -73,4 +73,10 @@ describe.skipIf(!have)("controller vs Python", () => {
     const decision = await choose(model, state, history, new Map(), new Set(), parts, served);
     expect(decision.target).toBe("Search");
   }, 120_000);
+
+  it("resolves 'the 1st Friday of next month' to a date part", async () => {
+    const parts = await requirements("Book me a flight from New York to San Francisco on the 1st Friday of next month", model, new Date(2026, 8, 25));
+    expect(parts.find((p) => p.date)).toMatchObject({ text: "on the 1st Friday of next month", date: "2026-10-02" });
+    expect(parts.map((p) => p.values).flat()).toEqual(expect.arrayContaining(["new york", "san francisco"]));
+  }, 60_000);
 });

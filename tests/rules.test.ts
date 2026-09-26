@@ -18,7 +18,7 @@ describe("isDateField", () => {
 
 describe("isUnsafe", () => {
   it("never offers account-changing or spending controls", () => {
-    for (const label of ["Track prices from New York to Denver departing 2026-10-09", "Sign in", "Log out", "Subscribe", "Buy now", "Delete trip", "Proceed to checkout"]) {
+    for (const label of ["Track prices from New York to Denver departing 2026-10-09", "Sign in", "Log out", "Subscribe", "Buy now", "Delete trip", "Proceed to checkout", "Book with Delta", "Book now"]) {
       expect(isUnsafe(field(label)), label).toBe(true);
     }
   });
