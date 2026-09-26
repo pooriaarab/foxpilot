@@ -30,7 +30,10 @@ export const SETTLE = `(action => new Promise(resolve => {
     if (menu && linked.length) roots.push(...document.querySelectorAll('[role="listbox"],[role="menu"]'));
     const options=roots.flatMap(root=>[...root.querySelectorAll('[role="option"],[role="gridcell"],[role="menuitem"],[role="menuitemradio"]')]);
     if (++frames>=2 && closing) { if (gone()) finish(); else requestAnimationFrame(ready); return; }
-    if (frames>=2 && (autocomplete || menu ? options.some(e=>{
+    // A menu button that reports its state must say it is open; a list that was
+    // already on the page otherwise ends the wait before the menu renders.
+    const opened=!menu || !field.hasAttribute('aria-expanded') || field.getAttribute('aria-expanded')==='true';
+    if (frames>=2 && opened && (autocomplete || menu ? options.some(e=>{
       const r=e.getBoundingClientRect();
       return r.width && r.height && r.bottom>0 && r.top<innerHeight && e.checkVisibility({checkOpacity:true,checkVisibilityCSS:true});
     }) : performance.now()-started>=150)) finish();
