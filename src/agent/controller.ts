@@ -411,7 +411,7 @@ function top(probabilities: Record<string, number>): [string, number] {
 const asLabels = (names: Iterable<string>): Labels => Object.fromEntries([...names].map((n) => [n, undefined]));
 
 /** Select a pending dialog action or score its available confirmation controls. */
-async function dialog(model: Scorer, ordered: Map<string, Group>, chosen: Chosen[]): Promise<Chosen[] | null> {
+async function dialog(model: Scorer, ordered: Map<string, Group>, chosen: Chosen[], history: HistoryEntry[]): Promise<Chosen[] | null> {
   const inside = new Map<string, Group>();
   for (const group of ordered.values()) {
     if (execute(group).dialog) inside.set(clean(execute(group).label), group);
@@ -425,6 +425,9 @@ async function dialog(model: Scorer, ordered: Map<string, Group>, chosen: Chosen
     [...inside].filter(([label, group]) => group.open && !firstDate(label) && !OPTION_ROLES.has(execute(group).role ?? "") && !isUnsafe(execute(group))),
   );
   if (!openable.size) return null;
+  // Zipline addition: a popup that appeared while typing is an autocomplete,
+  // not a dialog to confirm ("Ask Alexa about this" in Amazon's search box).
+  if (history[history.length - 1]?.kind === "fill") return null;
   const [value, confidence] = top(await model.classify(CONFIRM, "confirm", asLabels(openable.keys())));
   if (confidence < CONFIRM_FLOOR) return null;
   return [{ requirement: null, score: confidence, group: openable.get(value)! }];
@@ -570,7 +573,7 @@ export async function choose(
   const sending = await unsentForm(model, state, ordered, history, chosen);
   if (sending) chosen = [sending, ...chosen];
   const committing = picked.length ? null : await suggestion(model, ordered, history);
-  chosen = committing ? [committing] : ((await dialog(model, ordered, chosen)) ?? chosen);
+  chosen = committing ? [committing] : ((await dialog(model, ordered, chosen, history)) ?? chosen);
   const commits = Boolean(committing);
   if (!chosen.length) {
     const searching = searchFallback(ordered, history, parts);

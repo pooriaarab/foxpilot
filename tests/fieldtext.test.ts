@@ -37,7 +37,8 @@ describe("SpanWriter", () => {
     const writer = new SpanWriter(parts, found);
     const goal = "cheapest one-way ticket from New York to San Francisco.";
     expect(await writer.write({ ...base, textFields: 1, goal, requirement: "from New York", field: { label: "Search", role: "combobox" } }))
-      .toBe("cheapest one-way ticket from New York to San Francisco");
+      // "cheapest" picks among the results; it is not part of the query.
+      .toBe("one-way ticket from New York to San Francisco");
   });
 
   it("types the requirement's own value for multi-part goals", async () => {

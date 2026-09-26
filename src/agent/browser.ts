@@ -80,16 +80,57 @@ export class TabBrowser {
 
   private constructor(readonly tabId: number) {}
 
+  /** Main-frame loads started since attaching, and whether one is in progress. */
+  navigations = 0;
+  loading = false;
+  private mainFrame: string | null = null;
+  private listener = (source: chrome.debugger.Debuggee, method: string, params?: object) => {
+    if (source.tabId !== this.tabId) return;
+    const frameId = (params as { frameId?: string; frame?: { id: string; parentId?: string } } | undefined)?.frameId
+      ?? (params as { frame?: { id: string } } | undefined)?.frame?.id;
+    if (method === "Page.frameNavigated") {
+      const frame = (params as { frame: { id: string; parentId?: string } }).frame;
+      if (!frame.parentId) this.mainFrame = frame.id;
+      return;
+    }
+    if (frameId == null || (this.mainFrame != null && frameId !== this.mainFrame)) return;
+    if (method === "Page.frameStartedLoading") {
+      this.navigations++;
+      this.loading = true;
+    } else if (method === "Page.frameStoppedLoading") {
+      this.loading = false;
+    }
+  };
+
   static async attach(tabId: number): Promise<TabBrowser> {
     await chrome.debugger.attach({ tabId }, "1.3");
     const browser = new TabBrowser(tabId);
     // Keep menus and animations rendering while focus is in the side panel.
     await browser.call("Emulation.setFocusEmulationEnabled", { enabled: true });
+    // Page events tell a search that navigates (Amazon) from one that updates in place.
+    chrome.debugger.onEvent.addListener(browser.listener);
+    await browser.call("Page.enable");
+    const tree = await browser.call<{ frameTree: { frame: { id: string } } }>("Page.getFrameTree");
+    browser.mainFrame = tree.frameTree.frame.id;
     return browser;
   }
 
   async detach(): Promise<void> {
+    chrome.debugger.onEvent.removeListener(this.listener);
     await chrome.debugger.detach({ tabId: this.tabId }).catch(() => {});
+  }
+
+  /**
+   * After a send: if the page starts loading a new document within `startMs`,
+   * wait for it to finish (up to `maxMs`). Returns whether one loaded.
+   */
+  async settleNavigation(since: number, startMs = 150, maxMs = 8000): Promise<boolean> {
+    const start = performance.now();
+    while (this.navigations === since && performance.now() - start < startMs) await sleep(50);
+    if (this.navigations === since) return false;
+    while (this.loading && performance.now() - start < maxMs) await sleep(50);
+    await this.waitForLoad(Math.max(0, maxMs - (performance.now() - start)));
+    return true;
   }
 
   call<T = unknown>(method: string, params: Record<string, unknown> = {}): Promise<T> {

@@ -280,6 +280,7 @@ export class Agent {
       if (text === searchQuery(this.view.goal)) for (const part of this.parts) this.served.add(part.text);
     }
     const acting = performance.now();
+    const navigations = this.browser.navigations;
     await this.browser.act(action, page, text);
     const act = Math.round(performance.now() - acting);
     const history = this.view.history;
@@ -326,7 +327,7 @@ export class Agent {
     if (this.view.status === "blocked") this.view.message = "Three actions in a row changed nothing";
     // Parts without a value ("Book me a flight") are left to the page check.
     else if (entry.pageChanged && sent(entry) && this.parts.every((p) => this.served.has(p.text) || (!p.values.length && !p.date))) {
-      await this.finishIfVerified();
+      await this.finishIfVerified(navigations);
     }
   }
 
@@ -336,7 +337,10 @@ export class Agent {
    * the form was just sent, the finished page is checked instead; if it shows
    * the goal, the run ends there. Results get up to a second to finish loading first.
    */
-  private async finishIfVerified() {
+  private async finishIfVerified(navigations: number) {
+    // A search that loads a new page (Amazon) leaves the old one up for a
+    // moment; checking it would verify and read the page the search came from.
+    await this.browser.settleNavigation(navigations);
     // Wait until two looks in a row read the same page (results done loading), at most SETTLE_MS.
     const until = performance.now() + SETTLE_MS;
     let previous = this.page.fingerprint;
