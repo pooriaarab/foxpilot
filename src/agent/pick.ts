@@ -17,7 +17,7 @@ const WINDOWS: Record<string, [number, number]> = {
 export function qualifiers(goal: string): Qualifiers | null {
   const g = goal.toLowerCase();
   const q: Qualifiers = {};
-  if (/\b(cheapest|lowest[- ]priced?|least expensive|lowest (price|fare|cost))\b/.test(g)) q.order = "price-asc";
+  if (/\b(cheapest|cheap|cheaper|budget|inexpensive|affordable|lowest[- ]priced?|least expensive|lowest (price|fare|cost))\b/.test(g)) q.order = "price-asc";
   else if (/\b(most expensive|priciest|highest[- ]priced?)\b/.test(g)) q.order = "price-desc";
   else if (/\b(fastest|shortest|quickest)\b/.test(g)) q.order = "duration-asc";
   else if (/\bearliest\b/.test(g)) q.order = "depart-asc";
@@ -105,7 +105,7 @@ export function stripQualifiers(goal: string): string {
     .replace(/(^|[.;,!?]\s*|\s)(?:I(?:'d| would)? prefer|preferably|ideally|if possible|I(?:'d| would) like it)\b[^.;!?]*/gi, "$1")
     .replace(/\b(?:red[- ]?eye|overnight)\b/gi, " ")
     .replace(/\b(?:in the |on the |at )?(?:morning|afternoon|evening|night)\b/gi, " ")
-    .replace(/\b(?:cheapest|lowest[- ]priced?|least expensive|most expensive|priciest|highest[- ]priced?|fastest|shortest|quickest|earliest|latest|nonstop|non-stop|direct)\b/gi, " ")
+    .replace(/\b(?:cheapest|cheap|cheaper|budget|inexpensive|affordable|lowest[- ]priced?|least expensive|most expensive|priciest|highest[- ]priced?|fastest|shortest|quickest|earliest|latest|nonstop|non-stop|direct)\b/gi, " ")
     .replace(/\s+([,.;:!?])/g, "$1")
     .replace(/[,;:]+(?=[.!?]|\s*$)/g, "")
     .replace(/\s{2,}/g, " ")

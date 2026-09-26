@@ -52,4 +52,8 @@ describe("stripQualifiers", () => {
     expect(stripQualifiers("Flights from Boston to Denver on May 3, preferably something with Wi-Fi."))
       .toBe("Flights from Boston to Denver on May 3.");
   });
+  it("reads 'cheap' as cheapest", () => {
+    expect(qualifiers("Cheap nonstop ticket morning flight")).toMatchObject({ order: "price-asc", nonstop: true, windowName: "morning" });
+    expect(stripQualifiers("Find a one-way ticket to SF. Cheap nonstop ticket morning flight")).not.toMatch(/cheap/i);
+  });
 });
