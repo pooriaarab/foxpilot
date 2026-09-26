@@ -92,6 +92,8 @@ function completedDates(parts: Part[], page: Page, history: HistoryEntry[]): Set
 
 const SETTLE_MS = 1000;
 
+const hasControls = (page: Page) => page.actions.some((a) => a.kind === "click" || a.kind === "fill" || a.kind === "select");
+
 /** A step that sent a form: a real submit, Enter, or a click on its Search button. */
 function sent(entry: Step): boolean {
   return Boolean(entry.submit) || (entry.kind === "click" && sends({ kind: "click", label: entry.action } as Action));
@@ -139,7 +141,13 @@ export class Agent {
     // Qualifiers ("cheapest", "morning") choose among results; they are not field values.
     const parts = await requirements(stripQualifiers(task) || task, recording);
     const agent = new Agent(model, browser, task, parts, makeWriter(parts, found), onUpdate, found);
+    // A page that just loaded may not have drawn its controls yet (a site
+    // opened for the goal); give it up to 3 s before judging it.
     agent.page = await browser.observe();
+    for (let waited = 0; waited < 3000 && !hasControls(agent.page); waited += 250) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      agent.page = await browser.observe();
+    }
     return agent;
   }
 
@@ -244,6 +252,9 @@ export class Agent {
         }
       }
       this.view.status = selected === "DONE" ? "done" : "blocked";
+      if (selected === "BLOCKED" && !hasControls(page)) {
+        this.view.message = `No buttons, links or fields on "${page.title || page.url}": still loading, or a robot check`;
+      }
       return;
     }
     const action = page.actions.find((a) => a.id === selected)!;
