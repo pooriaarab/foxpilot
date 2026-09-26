@@ -107,7 +107,8 @@ function edits(a: string, b: string): number {
 /**
  * Zipline addition: namesValue that forgives typos in the goal. Each word of the
  * value matches a word of the label in order, one edit off for words of 4–6
- * letters and two for longer ones ("marmoor" ≈ "marymoor", "bagles" ≈ "bagels").
+ * letters and two for longer ones ("marmoor" ≈ "marymoor", "bagles" ≈ "bagels"),
+ * with an address allowed in between.
  * Short words and numbers must match exactly.
  */
 export function nearlyNames(label: string, value: string): boolean {
@@ -117,8 +118,21 @@ export function nearlyNames(label: string, value: string): boolean {
   if (!want.length) return false;
   const close = (a: string, b: string) =>
     a === b || (!/\d/.test(a) && a.length >= 4 && edits(a, b) <= (a.length <= 6 ? 1 : 2));
-  for (let start = 0; start + want.length <= have.length; start++) {
-    if (want.every((word, k) => close(word, have[start + k]!))) return true;
+  // In order, allowing up to 8 skipped words in between: a picked place reads
+  // "Blazing Bagels, 6975 176th Ave NE #365, Redmond, WA" for "blazing bagels redmond".
+  for (let start = 0; start < have.length; start++) {
+    if (!close(want[0]!, have[start]!)) continue;
+    let at = start;
+    let skipped = 0;
+    let ok = true;
+    for (const word of want.slice(1)) {
+      let next = at + 1;
+      while (next < have.length && !close(word, have[next]!)) next++;
+      skipped += next - at - 1;
+      if (next >= have.length || skipped > 8) { ok = false; break; }
+      at = next;
+    }
+    if (ok) return true;
   }
   return false;
 }
