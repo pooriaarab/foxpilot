@@ -54,6 +54,13 @@ describe.skipIf(!have)("answer highlight on fixtures", () => {
     expect(answer?.text.startsWith(first!)).toBe(true);
   }, 120_000);
 
+  it("shopping: cheapest of the item itself, not ads, other brands or accessories", async () => {
+    await page.goto("http://localhost:5403/shop.html");
+    const answer = await findAnswer(adapter(), model, "find me cheapest kitchenaid mixer on amazon.com");
+    expect(answer?.text).toContain("5 Speed Ultra Power Hand Mixer");
+    expect(answer?.label).toBe("Cheapest option · $59.99");
+  }, 120_000);
+
   it("picks the cheapest overall without a time window", async () => {
     await page.goto("http://localhost:5403/flights.html");
     const answer = await findAnswer(adapter(), model, "cheapest flight from New York to San Francisco");

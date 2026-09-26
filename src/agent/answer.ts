@@ -6,6 +6,7 @@
 import type { TabBrowser } from "./browser";
 import type { Scorer } from "./controller";
 import { choose, describe, parseClock, parseDuration, parseMoney, qualifiers, type Row } from "./pick";
+import { searchQuery } from "./search";
 
 export type Answer = { text: string; score: number; label?: string };
 
@@ -141,9 +142,8 @@ async function pickRow(browser: TabBrowser, model: Scorer, goal: string): Promis
     rows.push({
       i: block.i,
       text: block.text,
-      price:
-        parseMoney(found.price?.[0]?.text) ??
-        parseMoney(block.text.match(PRICE)?.[0]),
+      // The pattern first: "$139.95 $139 . 95" (Amazon) led GLiNER2 to "$139".
+      price: parseMoney(block.text.match(PRICE)?.[0]) ?? parseMoney(found.price?.[0]?.text),
       // Spans come ordered by confidence; the departure is the earliest time in the row.
       depart: parseClock(earliest(found.time)?.text) ?? parseClock(block.text),
       // Durations have a fixed shape ("6 hr 14 min"); GLiNER's span can stop at "6 hr".
@@ -152,7 +152,7 @@ async function pickRow(browser: TabBrowser, model: Scorer, goal: string): Promis
     });
   }
   lastRows = rows;
-  const row = choose(rows, q);
+  const row = await chooseItem(model, rows, q, searchQuery(goal));
   if (!row) {
     lastNote = explain(rows, q);
     return null;
@@ -184,6 +184,47 @@ async function topRow(browser: TabBrowser): Promise<Answer | null> {
   return { text: first.text, score: 1, label };
 }
 
+const STOP = new Set(["the", "and", "for", "with", "from", "that", "this", "one", "new"]);
+
+/**
+ * Shopping results mix the item with other brands, accessories and ads. When
+ * some rows name every word of the item ("kitchenaid" and "mixer"), only those
+ * count, sponsored ones last; then, from the best by the goal's order, GLiNER2
+ * checks each candidate is the item and not an accessory for it. Rows that
+ * never name the item (flights: "one-way ticket from New York…") skip all this.
+ */
+async function chooseItem(model: Scorer, rows: Row[], q: NonNullable<ReturnType<typeof qualifiers>>, item: string): Promise<Row | null> {
+  const words = (item.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).filter((w) => w.length >= 3 && !STOP.has(w));
+  const naming = words.length && words.length <= 5
+    ? rows.filter((r) => words.every((w) => new RegExp(`\\b${w}`, "i").test(r.text)))
+    : [];
+  if (!naming.length) return choose(rows, q);
+  const organic = naming.filter((r) => !/^\s*sponsored\b/i.test(r.text));
+  let pool = organic.length ? organic : naming;
+  // Measured on real titles: with "book" and "other" as their own labels, a
+  // cookbook scores 0.92 book; with only item vs accessory it scored 1.00 item.
+  // Accessories read too much like the item ("…Stand Mixer Pouring Shield
+  // Attachment" 0.88 item), so their telltale words are checked in code.
+  const labels = {
+    item: `the ${item} itself`,
+    accessory: "an attachment or spare part",
+    book: "a book or cookbook",
+    other: "another kind of product",
+  };
+  const accessory = new RegExp(
+    `\\b(attachments?|accessor(?:y|ies)|replacement|spare|cover|case|shield|fits|compatible with)\\b|\\bfor\\s+(?:an?\\s+|the\\s+|your\\s+)?${words[0]}\\b`, "i");
+  for (let checks = 0; checks < 6; checks++) {
+    const row = choose(pool, q);
+    if (!row) return null;
+    const title = row.text.replace(/^\s*(sponsored|overall pick|best seller|amazon's choice)\s*/i, "").slice(0, 160);
+    pool = pool.filter((r) => r !== row);
+    if (accessory.test(title)) continue;
+    const verdict = await model.classify(title, "product", labels);
+    if ((verdict.item ?? 0) >= 0.5) return row;
+  }
+  return choose(pool, q);
+}
+
 function earliest<T extends { start?: number }>(spans: T[] | undefined): T | undefined {
   return spans?.length ? [...spans].sort((a, b) => (a.start ?? 0) - (b.start ?? 0))[0] : undefined;
 }
@@ -208,6 +249,8 @@ function inWindowOf(minutes: number, [start, end]: [number, number]): boolean {
 
 export async function findAnswer(browser: TabBrowser, model: Scorer, goal: string): Promise<Answer | null> {
   lastNote = "";
+  lastScores = [];
+  lastRows = [];
   const picked = await pickRow(browser, model, goal);
   if (picked) return picked;
   // A goal with preferences ("cheapest", "red-eye") wants one of the results;
