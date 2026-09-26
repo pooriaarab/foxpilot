@@ -2,7 +2,7 @@
 
 A browser agent that runs entirely on your device. Type a goal in the side panel; [GLiNER2](https://github.com/fastino-ai/GLiNER2) runs on your GPU with WebGPU, reads the page and drives it until the goal is done. No server, no API key, nothing about the page or your goal leaves the browser.
 
-On Google Flights, "Find a one-way ticket from New York to San Francisco on October 9, 2026" reaches results in about 8 seconds: ticket type, both cities with their autocompletes, the date in the calendar, Search.
+On Google Flights, "Find a one-way ticket from New York to San Francisco on October 9, 2026. I prefer the cheapest nonstop morning flight." takes 10 actions and about 16 seconds: ticket type, both cities with their autocompletes, the date in the calendar, Search. Then it checks the results page against every part of the goal and highlights the cheapest nonstop that leaves in the morning.
 
 ## How it works
 
