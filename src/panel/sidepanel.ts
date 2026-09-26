@@ -372,12 +372,13 @@ function runLog(): string {
     "",
     "Steps:",
     ...view.history.map((h) =>
-      `${h.step}. ${h.operation} ${h.target ?? h.action}${h.text != null ? ` ← "${h.text}"` : ""}${h.requirement ? ` for "${h.requirement}"` : ""} · ${Math.round(h.confidence * 100)}% · ${h.pageChanged === false ? "page unchanged" : "page changed"}`,
+      `${h.step}. ${h.operation} ${h.target ?? h.action}${h.text != null ? ` ← "${h.text}"` : ""}${h.requirement ? ` for "${h.requirement}"` : ""} · ${Math.round(h.confidence * 100)}% · ${h.pageChanged === false ? "page unchanged" : "page changed"}` +
+        (h.timing ? `\n   ⏱ decide ${h.timing.decide} ms (${h.timing.calls} calls, ${h.timing.model} ms model, ≤${h.timing.labels} labels) · text ${h.textMs} ms · act ${h.timing.act} ms · observe ${h.timing.observe} ms · at ${(h.elapsedMs / 1000).toFixed(1)} s` : ""),
     ),
     "",
     "Decisions (top answers per requirement):",
     ...(view.decisions ?? []).map((d, i) =>
-      `${i + 1}. ${d.operation} ${d.target ?? ""} · served: ${d.served.join(" | ") || "-"}\n${Object.entries(d.rawAnswers).map(([req, a]) => `   "${req}" → ${Object.entries(a).slice(0, 3).map(([l, p]) => `${l} ${p.toFixed(2)}`).join(", ")}`).join("\n")}`,
+      `${i + 1}. ${d.operation} ${d.target ?? ""} · served: ${d.served.join(" | ") || "-"}${d.ms != null ? ` · ${d.ms} ms, ${d.calls} calls` : ""}\n${Object.entries(d.rawAnswers).map(([req, a]) => `   "${req}" → ${Object.entries(a).slice(0, 3).map(([l, p]) => `${l} ${p.toFixed(2)}`).join(", ")}`).join("\n")}`,
     ),
     "",
     `Text writer calls: ${JSON.stringify(view.textCalls)}`,
