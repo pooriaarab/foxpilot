@@ -124,6 +124,19 @@ export function satisfied(action: Action, history: HistoryEntry[]): boolean {
 }
 
 /** Group supported actions by observed node, preserving document order. */
+const OPTION_ROLES = new Set(["option", "menuitemradio", "menuitemcheckbox", "radio", "tab"]);
+
+/**
+ * Zipline addition: controls that change the user's account or spend money are
+ * never chosen (they stay in the label set, so scores match the Python controller). A run once clicked "Track prices…" and left a tracked flight
+ * behind; a browsing agent should not sign in, subscribe, buy or delete.
+ */
+const UNSAFE = /\b(track prices?|sign (in|out|up)|log ?(in|out)|subscribe|unsubscribe|delete|remove account|buy now|purchase|pay now|place order|checkout)\b/i;
+
+export function isUnsafe(action: Action): boolean {
+  return UNSAFE.test(action.label);
+}
+
 export function groups(state: Page, history: HistoryEntry[], refused: Set<string>): Map<string, Group> {
   const ordered = new Map<string, Group>();
   state.actions.forEach((action, position) => {
@@ -175,6 +188,43 @@ function schemaFor(ordered: Map<string, Group>, history: HistoryEntry[], valueTa
   return Object.keys(labels).length ? labels : null;
 }
 
+/**
+ * Zipline addition: while the goal still has values for the page's search form,
+ * clicks outside that form are shortcuts (tracked prices, recent searches,
+ * "explore" cards) that run some other search. One account's "One way trip from
+ * New York to Denver" cards took the weight that "Change ticket type" gets on a
+ * clean page (0.17 instead of 0.87). They stay in the label set (removing
+ * negatives made the model less sure, 0.87 to 0.47), but when one comes out on
+ * top, the scores are renormalized over the rest: the best control given that
+ * it belongs to the form. Dialogs, menus and autocomplete options count as the form.
+ */
+function shortcuts(ordered: Map<string, Group>, parts: Part[]): Set<string> {
+  const found = new Set<string>();
+  if (!parts.some((p) => p.values.length)) return found;
+  const fields = new Map<unknown, number>();
+  for (const group of ordered.values()) {
+    const action = execute(group);
+    if (group.takesValue && action.form != null) fields.set(action.form, (fields.get(action.form) ?? 0) + 1);
+  }
+  if (![...fields.values()].some((n) => n >= 2)) return found;
+  for (const group of ordered.values()) {
+    const action = execute(group);
+    if (action.kind === "click" && action.form == null && !action.dialog && action.suggestion_for == null) found.add(clean(action.label));
+  }
+  return found;
+}
+
+function withinForm(scores: Scores, outside: Set<string>): void {
+  if (!outside.size) return;
+  for (const [text, probabilities] of scores) {
+    const [label] = top(probabilities);
+    if (!outside.has(label)) continue;
+    const kept = Object.entries(probabilities).filter(([l]) => !outside.has(l));
+    const total = kept.reduce((sum, [, p]) => sum + p, 0);
+    if (total > 0) scores.set(text, Object.fromEntries(kept.map(([l, p]) => [l, p / total])));
+  }
+}
+
 /** Score requirements against observed controls, narrowing uncertain value matches to inputs. */
 async function match(
   model: Scorer, state: Page, history: HistoryEntry[], refused: Set<string>, memory: Memory, parts: Part[],
@@ -203,6 +253,7 @@ async function match(
     for (const [k, v] of scored) results.set(k, v);
     latency += spent;
   }
+  withinForm(results, shortcuts(ordered, parts));
   return { ordered, results, latency };
 }
 
@@ -247,6 +298,7 @@ function best(ordered: Map<string, Group>, scores: Scores, parts: Part[]): Chose
   }
   const offers: [Group, Map<number, number>][] = [];
   for (const group of openGroups) {
+    if (isUnsafe(execute(group))) continue;
     const column = new Map<number, number>();
     texts.forEach((text, index) => {
       const score = rate(group, scores.get(text));
@@ -323,7 +375,11 @@ async function dialog(model: Scorer, ordered: Map<string, Group>, chosen: Chosen
   if (!inside.size) return null;
   const wanted = chosen.filter((c) => execute(c.group).dialog);
   if (wanted.length) return wanted;
-  const openable = new Map([...inside].filter(([label, group]) => group.open && !firstDate(label)));
+  // Zipline addition: confirming a dialog means a button, not one of a menu's
+  // options (it picked 'Round trip' in an open ticket-type menu).
+  const openable = new Map(
+    [...inside].filter(([label, group]) => group.open && !firstDate(label) && !OPTION_ROLES.has(execute(group).role ?? "") && !isUnsafe(execute(group))),
+  );
   if (!openable.size) return null;
   const [value, confidence] = top(await model.classify(CONFIRM, "confirm", asLabels(openable.keys())));
   if (confidence < CONFIRM_FLOOR) return null;
@@ -356,7 +412,7 @@ async function unsentForm(
   const buttons = new Map<string, Group>();
   for (const group of ordered.values()) {
     const action = execute(group);
-    if (group.open && action.kind === "click" && inPending(action.form)) buttons.set(clean(action.label), group);
+    if (group.open && action.kind === "click" && inPending(action.form) && !isUnsafe(action)) buttons.set(clean(action.label), group);
   }
   if (!buttons.size) return enter(state);
   const [value, confidence] = top(await model.classify(SUBMIT, "submit", asLabels(buttons.keys())));

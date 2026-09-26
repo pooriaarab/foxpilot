@@ -197,7 +197,7 @@ function render(view: AgentView) {
     result.className = `result ${view.status}`;
     result.textContent =
       view.status === "done"
-        ? `Done in ${(view.elapsedMs / 1000).toFixed(1)} s. Check the page to confirm the result.`
+        ? `Done: ${view.history.length} actions in ${(view.elapsedMs / 1000).toFixed(1)} s on the page. Check the page to confirm the result.`
         : view.status === "stopped"
           ? "Stopped."
           : `${view.status === "blocked" ? "Blocked" : "Error"}: ${view.message ?? "no action left to take"}`;
@@ -247,6 +247,7 @@ async function run() {
   }, 100);
   try {
     browser = await attachOrOpenStart(tabId);
+    const setup = performance.now();
     await browser.evaluate(CLEAR).catch(() => {});
     const useLlm = llmToggle.checked && llm && llmReady;
     running = await Agent.create(
@@ -259,7 +260,9 @@ async function run() {
         void status.update(view);
       },
     );
+    const loopStart = performance.now();
     const view = await running.run();
+    const loopEnd = performance.now();
     render(view);
     await status.update(view);
     if (view.status === "done") {
@@ -275,7 +278,18 @@ async function run() {
       if (answer) showAnswer(answer.text, answer.score, answer.label);
       else showNote(failure ? `Answer search failed: ${failure}` : lastNote || "Nothing on the page stood out as the answer.");
     }
-    $("elapsed").textContent = `${(view.elapsedMs / 1000).toFixed(1)} s`;
+    // The big clock is wall time from Run, the same clock that ticked while it ran.
+    // Below it, where the time went: the loop's own timer leaves out attaching,
+    // reading the goal and the answer search.
+    const secs = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
+    const parts = [
+      `${secs(setup - started)} attach`,
+      `${secs(loopStart - setup)} reading goal`,
+      `${secs(loopEnd - loopStart)} on the page`,
+    ];
+    if (view.status === "done") parts.push(`${secs(performance.now() - loopEnd)} finding answer`);
+    $("elapsed").textContent = secs(performance.now() - started);
+    $("clock-sub").textContent = parts.join(" · ");
   } catch (error) {
     const result = $<HTMLParagraphElement>("result");
     result.hidden = false;

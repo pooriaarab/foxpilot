@@ -43,4 +43,16 @@ describe.skipIf(!have)("controller vs Python", () => {
       expect(Math.abs(decision.confidence - c.decision.confidence)).toBeLessThan(1e-3);
     }, 120_000);
   }
+
+  // Zipline addition, not in the oracle: an account's tracked-price cards
+  // ("One way trip from New York … to Denver.") must not keep the form's ticket
+  // type below the floor, which sent a one-way goal off as a round trip.
+  it("flights with tracked-price cards: ticket type first", async () => {
+    const state = (JSON.parse(readFileSync(`${ROOT}tests/fixtures/flights-tracked.json`, "utf8")) as { state: Page }).state;
+    const goal = oracle.find((c) => c.name === "flights-start")!.goal;
+    const parts = await requirements(goal, model);
+    const decision = await choose(model, state, [], new Map(), new Set(), parts, new Set());
+    expect(decision.target).toBe("Change ticket type. Round trip");
+    expect(decision.confidence).toBeGreaterThan(0.5);
+  }, 120_000);
 });
