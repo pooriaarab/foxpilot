@@ -11,8 +11,9 @@ const PAGE = `<div role="dialog" id="d" style="transition:opacity .4s"><div role
   <button id="done">Done</button></div>
   <script>document.getElementById('done').onclick=()=>{const d=document.getElementById('d');d.style.opacity='0';setTimeout(()=>d.remove(),450)};
   window.__glinerFast={nodes:new Map([[1,document.getElementById('done')],[2,document.getElementById('day')],[3,document.getElementById('ticket')]])};</script>
-  <button id="ticket" aria-haspopup="listbox" aria-controls="nowhere-useful"
-    onclick="setTimeout(()=>{const l=document.createElement('ul');l.setAttribute('role','listbox');l.innerHTML='<li role=option>One way</li>';document.body.append(l)},200)">Round trip</button>
+  <button id="ticket" aria-haspopup="listbox" aria-expanded="false" aria-controls="nowhere-useful"
+    onclick="setTimeout(()=>{const l=document.createElement('ul');l.setAttribute('role','listbox');l.innerHTML='<li role=option>One way</li>';document.body.append(l);this.setAttribute('aria-expanded','true')},200)">Round trip</button>
+  <ul role="listbox"><li role="option">Already here</li></ul>
   <div id="nowhere-useful"></div>`;
 
 it("waits for a closing picker, not for a click on a day", async () => {
