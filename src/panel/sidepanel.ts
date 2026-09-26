@@ -192,6 +192,7 @@ function render(view: AgentView) {
   const result = $<HTMLParagraphElement>("result");
   const final = ["done", "blocked", "stopped", "error"].includes(view.status);
   result.hidden = !final;
+  $("copy-log").hidden = !final;
   if (final) {
     result.className = `result ${view.status}`;
     result.textContent =
@@ -302,6 +303,39 @@ for (const example of EXAMPLES) {
   });
   $("examples").append(button);
 }
+
+/** Plain-text log of the last run: goal, requirements, every decision and step, and the answer step. */
+function runLog(): string {
+  const view = (window as unknown as { __zipline?: AgentView }).__zipline;
+  const answer = (window as unknown as { __ziplineAnswer?: unknown }).__ziplineAnswer;
+  if (!view) return "No run yet.";
+  const lines = [
+    `Zipline run · ${new Date().toISOString()}`,
+    `Goal: ${view.goal}`,
+    `Requirements: ${view.parts.map((p) => `"${p.text}"${p.values.length ? ` [${p.values.join(", ")}]` : ""}`).join(" · ")}`,
+    `Status: ${view.status}${view.message ? ` (${view.message})` : ""} · ${(view.elapsedMs / 1000).toFixed(1)} s`,
+    "",
+    "Steps:",
+    ...view.history.map((h) =>
+      `${h.step}. ${h.operation} ${h.target ?? h.action}${h.text != null ? ` ← "${h.text}"` : ""}${h.requirement ? ` for "${h.requirement}"` : ""} · ${Math.round(h.confidence * 100)}% · ${h.pageChanged === false ? "page unchanged" : "page changed"}`,
+    ),
+    "",
+    "Decisions (top answers per requirement):",
+    ...(view.decisions ?? []).map((d, i) =>
+      `${i + 1}. ${d.operation} ${d.target ?? ""} · served: ${d.served.join(" | ") || "-"}\n${Object.entries(d.rawAnswers).map(([req, a]) => `   "${req}" → ${Object.entries(a).slice(0, 3).map(([l, p]) => `${l} ${p.toFixed(2)}`).join(", ")}`).join("\n")}`,
+    ),
+    "",
+    `Text writer calls: ${JSON.stringify(view.textCalls)}`,
+    `Answer step: ${JSON.stringify(answer ?? null).slice(0, 1500)}`,
+  ];
+  return lines.join("\n");
+}
+
+$("copy-log").addEventListener("click", async () => {
+  await navigator.clipboard.writeText(runLog());
+  $("copy-log").textContent = "Copied ✓";
+  setTimeout(() => ($("copy-log").textContent = "Copy run log"), 1500);
+});
 
 goalBox.addEventListener("input", refreshRun);
 runButton.addEventListener("click", () => void run());

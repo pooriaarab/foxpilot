@@ -169,6 +169,9 @@ export async function findAnswer(browser: TabBrowser, model: Scorer, goal: strin
   lastNote = "";
   const picked = await pickRow(browser, model, goal);
   if (picked) return picked;
+  // A goal with preferences ("cheapest", "red-eye") wants one of the results;
+  // some other card on the page is not an answer to it.
+  if (qualifiers(goal)) return null;
   const blocks = await browser.evaluate<{ i: number; text: string }[]>(COLLECT);
   if (!blocks?.length) return null;
   // Naming what an answer card is, and what the other blocks are, matters: with

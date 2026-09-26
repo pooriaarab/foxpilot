@@ -392,3 +392,19 @@ textarea:focus {
   background: var(--panel);
   color: var(--muted);
 }
+
+.copy-log {
+  margin-top: 8px;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font: 12px system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.copy-log:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
