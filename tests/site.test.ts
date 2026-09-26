@@ -115,6 +115,9 @@ describe("typos in the goal", () => {
     expect(nearlyNames("Seattle", "marmoor park")).toBe(false);
     expect(nearlyNames("Route 520", "route 250")).toBe(false);
     expect(nearlyNames("Bay", "bat")).toBe(false);
+    expect(nearlyNames("Destination Blazing Bagels, 6975 176th Ave NE #365, Redmond, WA 98052", "blazing bagels redmond")).toBe(true);
+    expect(nearlyNames("Blazing Bagels 21 min", "blazing bagels redmond")).toBe(false);
+    expect(nearlyNames("Blazing Hot Wings and Grill, open late, 12 locations across the Seattle metro area near Redmond", "blazing redmond")).toBe(false);
   });
 
   it("takes the suggestion whose name is closest to what was typed", async () => {
