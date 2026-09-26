@@ -230,6 +230,7 @@ async function passOver(
 function best(ordered: Map<string, Group>, scores: Scores, parts: Part[]): Chosen[] {
   const valued = new Set(parts.filter((p) => p.values.length).map((p) => p.text));
   const dates = parts.filter((p) => p.date).map((p) => [p.text, p.date!] as const);
+  const datedTexts = new Set(dates.map(([text]) => text));
   const anyOpen = [...ordered.values()].some((g) => g.open);
   const texts = anyOpen ? [...scores.keys()] : [];
   let openGroups = [...ordered.values()].filter((g) => g.open);
@@ -250,6 +251,9 @@ function best(ordered: Map<string, Group>, scores: Scores, parts: Part[]): Chose
     texts.forEach((text, index) => {
       const score = rate(group, scores.get(text));
       if (!score) return;
+      // Zipline addition: a value that is not a date does not go into a date field
+      // ("from New York" scored 0.88 for "Departure" on one Google Flights layout).
+      if (group.takesValue && valued.has(text) && !datedTexts.has(text) && isDateField(execute(group))) return;
       if (score >= (valued.has(text) && group.takesValue ? VALUE_FLOOR : FLOOR)) column.set(index, score);
     });
     if (column.size) offers.push([group, column]);
@@ -401,6 +405,11 @@ function searchFallback(ordered: Map<string, Group>, history: HistoryEntry[], pa
     }
   }
   return null;
+}
+
+/** A field that takes a date, judged by its label ("Departure", "Return", "Check-in", "Date"). */
+export function isDateField(action: Action): boolean {
+  return /\b(date|dates|depart(ure|ing)?|return(ing)?|check[- ]?in|check[- ]?out|arriv(al|e|ing)|when|dd\/mm|mm\/dd)\b/i.test(action.label);
 }
 
 function control(state: Page, name: string): Action | undefined {

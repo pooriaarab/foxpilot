@@ -16,15 +16,18 @@ const SETTLE = `(action => new Promise(resolve => {
   const field=window.__glinerFast?.nodes.get(action.node);
   const autocomplete=action.kind==='fill' && (field?.getAttribute('role')==='combobox' ||
     field?.getAttribute('aria-autocomplete')==='list' || field?.hasAttribute('aria-controls'));
+  // Zipline addition: a click that opens a menu waits for its options too.
+  const menu=action.kind==='click' && !!field && (field.hasAttribute('aria-haspopup') ||
+    field.hasAttribute('aria-expanded') || field.getAttribute('role')==='combobox');
   let frames=0, stopped=false; const started=performance.now();
   const finish=()=>{stopped=true;resolve()};
-  setTimeout(finish,autocomplete ? 600 : 250);
+  setTimeout(finish,autocomplete ? 600 : menu ? 800 : 250);
   const ready=()=>{
     if (stopped) return;
     const ids=(field?.getAttribute('aria-controls')||field?.getAttribute('aria-owns')||'').split(/\\s+/).filter(Boolean);
     const roots=ids.length ? ids.map(id=>document.getElementById(id)).filter(Boolean) : [document];
-    const options=roots.flatMap(root=>[...root.querySelectorAll('[role="option"],[role="gridcell"]')]);
-    if (++frames>=2 && (autocomplete ? options.some(e=>{
+    const options=roots.flatMap(root=>[...root.querySelectorAll('[role="option"],[role="gridcell"],[role="menuitem"],[role="menuitemradio"]')]);
+    if (++frames>=2 && (autocomplete || menu ? options.some(e=>{
       const r=e.getBoundingClientRect();
       return r.width && r.height && r.bottom>0 && r.top<innerHeight && e.checkVisibility({checkOpacity:true,checkVisibilityCSS:true});
     }) : performance.now()-started>=150)) finish();

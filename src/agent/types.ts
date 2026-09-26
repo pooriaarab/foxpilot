@@ -16,6 +16,8 @@ export type Action = {
   offscreen?: boolean;
   self_link?: boolean;
   suggestion_for?: number;
+  expanded?: string;
+  haspopup?: string;
   delta?: number;
   rect?: { x: number; y: number; w: number; h: number };
 };

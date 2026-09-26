@@ -6,7 +6,7 @@ import { firstDate, normalise } from "./dates";
 import { Refused, type FieldContext, type FieldWriter } from "./fieldtext";
 import { searchQuery } from "./search";
 import { stripQualifiers } from "./pick";
-import type { HistoryEntry, Page } from "./types";
+import type { Action, HistoryEntry, Page } from "./types";
 
 export const MAX_STEPS = 60;
 /** Consecutive decisions that reach no execution before the run is called stuck. */
@@ -55,6 +55,10 @@ function filledLabel(history: HistoryEntry[]) {
 /** The page's controls by kind and label, ignoring text and geometry. */
 function controls(page: Page): string {
   return JSON.stringify(page.actions.map((a) => [a.kind, a.label, a.value ?? null]));
+}
+
+function opensMenu(action: Action) {
+  return action.kind === "click" && (action.expanded !== undefined || action.haspopup !== undefined || action.role === "combobox");
 }
 
 function opensDialog(page: Page) {
@@ -274,7 +278,11 @@ export class Agent {
     this.page = await this.browser.observe();
     for (const done of completedDates(this.parts, this.page, history)) this.served.add(done);
     // A control that opened a menu or picker has not answered its requirement yet.
-    if (decision.covered.length && !opensDialog(this.page)) for (const c of decision.covered) this.served.add(c);
+    // Zipline addition: nor has one that opens a menu at all (aria-expanded,
+    // aria-haspopup, combobox), even if the menu had not rendered when observed.
+    if (decision.covered.length && !opensDialog(this.page) && !opensMenu(action)) {
+      for (const c of decision.covered) this.served.add(c);
+    }
     entry.pageChanged = this.page.fingerprint !== page.fingerprint;
     entry.elapsedMs = this.elapsed();
     const repeated = history.slice(-3);
