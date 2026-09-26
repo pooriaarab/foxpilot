@@ -12,7 +12,9 @@ import type { Action, HistoryEntry, Page } from "./types";
 export type Check = { part: string; ok: boolean; evidence: string };
 export type Verdict = { verified: boolean; checks: Check[]; problem?: string };
 
-const SETTING = { setting: "an option the person wants, such as trip type, cabin class, or travel mode" };
+// Examples in the description matter: without "walking" in it, "Get walking
+// directions" gave no span; with them, walking 0.84, one-way 0.98, business class 0.93.
+const SETTING = { setting: "an option or mode the person wants, such as one-way, business class, walking, driving or transit" };
 
 const PAGE = {
   problem: "an error, no results, a captcha or a sign-in page",
@@ -54,10 +56,23 @@ function evidenceFor(page: Page, part: Part): Check | null {
 }
 
 /** "one-way ticket" is shown as "One way": try the span, then without its last word. */
-function settingShown(page: Page, span: string): Action | undefined {
+const on = (a: Action) => [a.selected, a.checked, a.pressed].some((v) => v === "true");
+const stated = (a: Action) => [a.selected, a.checked, a.pressed].some((v) => v != null);
+
+/**
+ * The control showing a setting. Where the matching controls report a state
+ * (a row of travel-mode tabs: aria-selected, aria-checked, aria-pressed), the
+ * one for the setting must be the selected one: a "Walking" tab that is merely
+ * on the page does not mean walking directions.
+ */
+function settingShown(page: Page, span: string): { control?: Action; unselected?: Action } {
   const words = span.split(/[\s-]+/).filter(Boolean);
   const tries = [words.join(" "), words.length > 1 ? words.slice(0, -1).join(" ") : ""].filter(Boolean);
-  return controlsOf(page).find((a) => shown(a).some((t) => tries.some((needle) => namesValue(t, needle))));
+  const matching = controlsOf(page).filter((a) => shown(a).some((t) => tries.some((needle) => namesValue(t, needle))));
+  if (!matching.length) return {};
+  if (!matching.some(stated)) return { control: matching[0] };
+  const selected = matching.find(on);
+  return selected ? { control: selected } : { unselected: matching.find(stated) };
 }
 
 export async function verify(model: Scorer, page: Page, parts: Part[], history: HistoryEntry[]): Promise<Verdict> {
@@ -71,11 +86,13 @@ export async function verify(model: Scorer, page: Page, parts: Part[], history: 
     const found = await model.extractEntities(part.text, SETTING);
     const span = found.setting?.[0]?.text;
     if (!span) continue; // "Get directions": nothing checkable beyond the page itself
-    const control = settingShown(page, span);
+    const { control, unselected } = settingShown(page, span);
     checks.push(
       control
         ? { part: part.text, ok: true, evidence: control.label.trim() }
-        : { part: part.text, ok: false, evidence: `nothing on the page shows "${span}"` },
+        : unselected
+          ? { part: part.text, ok: false, evidence: `"${unselected.label.trim()}" is on the page but not selected` }
+          : { part: part.text, ok: false, evidence: `nothing on the page shows "${span}"` },
     );
   }
   if (unsentForms(page, history).size) checks.push({ part: "Search sent", ok: false, evidence: "the form still holds values that were never sent" });
