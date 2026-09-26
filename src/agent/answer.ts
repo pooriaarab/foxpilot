@@ -109,7 +109,13 @@ const ROW_TYPES = {
 async function pickRow(browser: TabBrowser, model: Scorer, goal: string): Promise<Answer | null> {
   const q = qualifiers(goal);
   if (!q) return null;
-  const collected = await browser.evaluate<{ stats: { items: number; priced: number; long: number; hidden: number }; rows: { i: number; text: string }[] }>(COLLECT_ROWS);
+  type Collected = { stats: { items: number; priced: number; long: number; hidden: number }; rows: { i: number; text: string }[] };
+  // Results can still be rendering when the run ends; wait up to 3 s for rows.
+  let collected = await browser.evaluate<Collected>(COLLECT_ROWS);
+  for (let tries = 0; tries < 12 && !collected?.rows?.length; tries++) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    collected = await browser.evaluate<Collected>(COLLECT_ROWS);
+  }
   const blocks = collected?.rows ?? [];
   if (!blocks.length) {
     const st = collected?.stats;

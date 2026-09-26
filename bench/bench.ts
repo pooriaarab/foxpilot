@@ -41,6 +41,23 @@ async function main() {
   };
   for (const c of extract) await time(`extract "${c.text.slice(0, 32)}…"`, () => model.extractEntities(c.text, c.labels));
   for (const c of classify.slice(0, 4)) await time(`classify "${c.text.slice(0, 30)}" (${Object.keys(c.labels).length} labels)`, () => model.classify(c.text, "referenced", c.labels));
+  // Label-count sweep: calendar pickers put 40+ long day labels in the schema.
+  if (params.get("sweep")) {
+    const day = (i: number, price: number) => new Date(Date.UTC(2026, 8, 20 + i)).toUTCString().slice(0, 16) + ` , ${price} US dollars`;
+    for (const n of [10, 23, 30, 36, 40, 46, 52, 47, 48, 49, 50, 51, 53, 54]) {
+      for (const price of [2, 1275]) {
+        const labels = Object.fromEntries(Array.from({ length: n }, (_, i) => [day(i, price), ""]));
+        const tokens = (model as unknown as { encode: (t: string, o: object) => { inputIds: number[] } })
+          .encode("on the 1st Friday of next month", { name: "referenced", marker: "[L]", labels }).inputIds.length;
+        const s = performance.now();
+        await model.classify("on the 1st Friday of next month", "referenced", labels);
+        const first = performance.now() - s;
+        const s2 = performance.now();
+        await model.classify("on the 1st Friday of next month", "referenced", labels);
+        log(`sweep ${String(n).padStart(2)} labels · ${tokens} tokens · new shape ${first.toFixed(0)} ms · same shape ${(performance.now() - s2).toFixed(0)} ms`);
+      }
+    }
+  }
   const got = await model.extractEntities(extract[0]!.text, extract[0]!.labels);
   log(`check: ${JSON.stringify(Object.fromEntries(Object.entries(got).filter(([, v]) => v.length).map(([k, v]) => [k, v.map((e) => e.text)])))}`);
   log("DONE");
