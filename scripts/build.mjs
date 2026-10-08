@@ -31,9 +31,14 @@ const common = {
   absWorkingDir: root,
   alias: { "@huggingface/transformers": join(transformersDir, "dist/transformers.web.js") },
 };
-const entries = [{ sidepanel: "src/panel/sidepanel.ts" }, { background: "src/background/background.ts" }];
-for (const entryPoints of entries) {
-  const config = { ...common, entryPoints };
+// kit.js is injected into pages with scripting.executeScript({files}), so it is a plain script, not a module.
+const entries = [
+  { entryPoints: { sidepanel: "src/panel/sidepanel.ts" } },
+  { entryPoints: { background: "src/background/background.ts" } },
+  { entryPoints: { kit: "src/agent/kit.ts" }, format: "iife" },
+];
+for (const entry of entries) {
+  const config = { ...common, ...entry };
   if (watch) await (await esbuild.context(config)).watch();
   else await esbuild.build(config);
 }
