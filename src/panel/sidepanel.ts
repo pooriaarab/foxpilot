@@ -397,7 +397,7 @@ async function run({ goal, tabId, llm: useLlm = false }: RunOptions): Promise<Ru
       model,
       browser,
       task,
-      (parts, found): FieldWriter => (useLlm ? llm! : new SpanWriter(parts, found)),
+      (parts, found, scorer): FieldWriter => (useLlm ? llm! : new SpanWriter(parts, found, scorer)),
       (view) => {
         render(view);
         void status.update(view);

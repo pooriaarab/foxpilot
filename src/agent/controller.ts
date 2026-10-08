@@ -6,6 +6,7 @@
 import { firstDate, resolveDate, sameDate, type IsoDate } from "./dates";
 import type { Action, HistoryEntry, Page } from "./types";
 import { isSearchField } from "./search";
+import { parseAsk, properName } from "./ask";
 
 export type Labels = Record<string, string | undefined>;
 
@@ -37,6 +38,11 @@ export const VALUE_TYPES: Labels = {
   title: "the title of a book, article, page or work",
 };
 
+/** Types whose span may carry a trailing kind noun ("… plan"). */
+const NAMED_TYPES = new Set(["organization", "product", "title"]);
+/** Stands in for a space inside a dictated value while the goal is split. */
+const HOLD = "\uE000";
+
 const VERBS =
   "open|click|press|select|choose|go|view|find|search|set|enter|type|add|remove|check|" +
   "uncheck|submit|close|show|read|download|install|book|buy|sort|filter|apply|confirm";
@@ -53,7 +59,8 @@ const KINDS: Record<string, string> = {
   click: "a button or link to press",
 };
 
-export type Part = { text: string; values: string[]; date: IsoDate | null };
+/** A requirement. `key` names the field a dictated value is for ("name", "access code"). */
+export type Part = { text: string; values: string[]; date: IsoDate | null; key?: string };
 export type Group = { position: number; actions: Map<string, Action>; open: boolean; takesValue: boolean };
 type Scores = Map<string, Record<string, number>>;
 type Chosen = { requirement: string | null; score: number; group: Group; rank?: number; commits?: boolean };
@@ -140,26 +147,58 @@ export function nearlyNames(label: string, value: string): boolean {
 /** The name part of a suggestion ("Marymoor Park    West Lake Sammamish Pkwy NE" → "Marymoor Park"). */
 const nameOf = (label: string) => label.split(/\s{2,}|\n/)[0]!;
 
-/** Split the goal into requirements and extract literal values with GLiNER. */
+/**
+ * Split the goal into requirements and extract literal values with GLiNER.
+ * Zipline addition: the ask is read first (ask.ts). Its "Open this page …"
+ * preamble is dropped; each "key: value" item is a part of its own; a part
+ * that holds a quoted or shaped value takes that literal and its key, not
+ * GLiNER's spans.
+ */
 export async function requirements(goal: string, model: Scorer, today?: Date): Promise<Part[]> {
-  const text = clean(goal, 600);
+  const ask = parseAsk(clean(goal, 600));
+  const text = ask.text;
   const found = await model.extractEntities(text, VALUE_TYPES);
   const values = new Set<string>();
-  for (const spans of Object.values(found)) {
-    for (const span of spans) if (span.text.length > 1) values.add(span.text.toLowerCase());
+  for (const [type, spans] of Object.entries(found)) {
+    for (const span of spans) {
+      // "the Signal Plus Ultra plan" names the plan "Signal Plus Ultra".
+      const value = NAMED_TYPES.has(type) ? properName(span.text) : span.text;
+      if (value.length > 1) values.add(value.toLowerCase());
+    }
   }
+  const inProse = ask.values.filter((v) => v.kind !== "list");
   const parts: Part[] = [];
-  for (const raw of text.split(SPLIT)) {
-    const part = raw.replace(/^[ ,.;:]+|[ ,.;:]+$/g, "");
-    if (part.length < 2) continue;
-    const lowered = part.toLowerCase();
-    let inPart = [...values].filter((v) => lowered.includes(v)).sort();
-    // Zipline addition: "to Blazing Bagles Redmond" is one place; GLiNER2 kept
-    // only "bagles redmond". A short "to/from/at/near …" part keeps its whole object.
-    const object = /^(?:from|to|at|near)\s+(.+)$/i.exec(part)?.[1]?.replace(/[.,;:!?]+$/, "").toLowerCase();
-    if (object && inPart.length === 1 && object !== inPart[0] && object.includes(inPart[0]!) &&
-        object.split(/\s+/).length <= 5 && !firstDate(object, today)) inPart = [object];
-    parts.push({ text: part, values: inPart, date: resolveDate(part, today) });
+  let at = 0;
+  for (const segment of ask.segments) {
+    if (typeof segment !== "string") {
+      parts.push({ text: `${segment.key}: ${segment.value}`, values: [segment.value.toLowerCase()], date: resolveDate(segment.value, today), key: segment.key });
+      at = segment.end;
+      continue;
+    }
+    at = text.indexOf(segment, at);
+    // SPLIT must not cut a dictated value ("Q3 report for Ana"): hold its spaces.
+    const held = [...segment].map((c, i) => (c === " " && inProse.some((v) => v.start <= at + i && at + i < v.end) ? HOLD : c)).join("");
+    let from = at;
+    for (const piece of held.split(SPLIT)) {
+      const start = text.indexOf(piece.replaceAll(HOLD, " "), from);
+      from = start + piece.length;
+      const part = piece.replace(/^[ ,.;:]+|[ ,.;:]+$/g, "").replaceAll(HOLD, " ");
+      if (part.length < 2) continue;
+      const lowered = part.toLowerCase();
+      const dictated = inProse.filter((v) => v.start >= start && v.end <= from);
+      if (dictated.length) {
+        parts.push({ text: part, values: dictated.map((v) => v.value.toLowerCase()), date: null, key: dictated[0]!.key });
+        continue;
+      }
+      let inPart = [...values].filter((v) => lowered.includes(v)).sort();
+      // Zipline addition: "to Blazing Bagles Redmond" is one place; GLiNER2 kept
+      // only "bagles redmond". A short "to/from/at/near …" part keeps its whole object.
+      const object = /^(?:from|to|at|near)\s+(.+)$/i.exec(part)?.[1]?.replace(/[.,;:!?]+$/, "").toLowerCase();
+      if (object && inPart.length === 1 && object !== inPart[0] && object.includes(inPart[0]!) &&
+          object.split(/\s+/).length <= 5 && !firstDate(object, today)) inPart = [object];
+      parts.push({ text: part, values: inPart, date: resolveDate(part, today) });
+    }
+    at += segment.length;
   }
   return parts.length ? parts : [{ text, values: [...values].sort(), date: resolveDate(text, today) }];
 }
@@ -437,6 +476,20 @@ function best(ordered: Map<string, Group>, scores: Scores, parts: Part[]): Chose
   const valuesOf = new Map(parts.map((p) => [p.text, p.values]));
   const dates = parts.filter((p) => p.date).map((p) => [p.text, p.date!] as const);
   const datedTexts = new Set(dates.map(([text]) => text));
+  // Zipline addition: of one dropdown's options that name the value, only the
+  // one whose label is the value, else the one that adds the fewest words.
+  // "Signal" and "Signal Plus" never serve "Signal Plus Ultra"; "Signal Plus
+  // Ultra" never serves "Signal" when "Signal" is an option or already chosen.
+  const closestOption = (action: Action, text: string): boolean => {
+    const wanted = valuesOf.get(text) ?? [];
+    const extra = (option: string) =>
+      wanted.every((value) => namesValue(option, value)) ? wordsOf(option).length - wanted.flatMap(wordsOf).length : Infinity;
+    const options = [...ordered.values()].map(execute)
+      .filter((a) => a.kind === "select" && a.node === action.node && a.document_id === action.document_id)
+      .map((a) => extra(a.label.split(" → ").pop()!));
+    const fewest = Math.min(...options, extra(action.current_value ?? ""));
+    return fewest === Infinity || (extra(action.label.split(" → ").pop()!) === fewest && extra(action.current_value ?? "") > fewest);
+  };
   const anyOpen = [...ordered.values()].some((g) => g.open);
   const texts = anyOpen ? [...scores.keys()] : [];
   let openGroups = [...ordered.values()].filter((g) => g.open);
@@ -477,6 +530,9 @@ function best(ordered: Map<string, Group>, scores: Scores, parts: Part[]): Chose
       const names = execute(group).kind === "select" ? namesValue : execute(group).suggestion_for != null ? nearlyNames : null;
       if (names && valued.has(text) &&
           !(valuesOf.get(text) ?? []).every((value) => names(execute(group).label, value))) return;
+      // A part with no value sets a dropdown only to an option it names ("Sort by price").
+      if (execute(group).kind === "select" &&
+          !(valued.has(text) ? closestOption(execute(group), text) : namesValue(text, execute(group).label.split(" → ").pop()!))) return;
       if (score >= (valued.has(text) && group.takesValue ? VALUE_FLOOR : FLOOR)) column.set(index, score);
     });
     if (column.size) offers.push([group, column]);
@@ -742,7 +798,9 @@ export async function choose(
     const last = history[history.length - 1];
     if (commits && last?.requirement && nearlyNames(action.label, last.text ?? "")) covered = [last.requirement];
     if (action.kind === "fill") {
-      const holding = new Set(parts.filter((p) => p.values.length).map((p) => p.text));
+      // Zipline addition: a dictated value has no suggestion to commit; typed
+      // as written, its part is done and takes no other field.
+      const holding = new Set(parts.filter((p) => p.values.length && !p.key).map((p) => p.text));
       covered = covered.filter((text) => !holding.has(text));
     } else {
       const unproven = new Set(
