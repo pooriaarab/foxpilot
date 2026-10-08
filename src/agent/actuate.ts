@@ -11,6 +11,7 @@ type Acted = { kind: string; node?: number; value?: string };
 declare global {
   interface Window {
     __glinerFast?: { nodes: Map<number, HTMLElement>; pageKey(): unknown[]; guard(e?: Element): unknown };
+    __focusBeforeClick?: Element | null;
   }
 }
 
@@ -46,6 +47,10 @@ export function clickAt(x: number, y: number): boolean {
   while (hit?.shadowRoot) { const inner = hit.shadowRoot.elementFromPoint(x, y); if (!inner || inner === hit) break; hit = inner; }
   if (!hit) return false;
   const at = hit;
+  // fillField reads this to tell a focus move made by this click from a stale one.
+  let before: Element | null = document.activeElement;
+  while (before?.shadowRoot?.activeElement) before = before.shadowRoot.activeElement;
+  window.__focusBeforeClick = before;
   const mouse = { bubbles: true, cancelable: true, composed: true, view: window, clientX: x, clientY: y,
     screenX: screenX + x, screenY: screenY + y, button: 0, detail: 1 };
   const pointer = { ...mouse, pointerId: 1, pointerType: "mouse", isPrimary: true, width: 1, height: 1 };
@@ -72,19 +77,38 @@ export function clickAt(x: number, y: number): boolean {
  * Replaces the text of a field. execCommand inserts like typing, with the
  * beforeinput and input events React, Angular and editors listen for. When it
  * cannot, the value goes in through the native setter, past React's value
- * tracker, so React still sees a change on the input event.
+ * tracker, so React still sees a change on the input event. Returns null when
+ * there is no editable target. It never types into a password field.
  */
 export function fillField(node: number, text: string): string | null {
+  const target = window.__glinerFast?.nodes.get(node);
+  if (!target?.isConnected) return null;
+  const parent = (e: Element) => e.parentElement || (e.parentNode as ShadowRoot | null)?.host || null;
+  const within = (e: Element, box: Element) => { for (let n: Element | null = e; n; n = parent(n)) if (n === box) return true; return false; };
+  const editable = (e: Element | null | undefined): e is HTMLElement =>
+    e instanceof HTMLTextAreaElement || (e instanceof HTMLInputElement && /^(text|search|email|url|tel|number|)$/.test(e.type)) ||
+    (e instanceof HTMLElement && !(e instanceof HTMLInputElement) && e.isContentEditable);
   // Type where focus is, as CDP Input.insertText did: clicking a field often
-  // moves focus to a new input (an overlay or combobox). If the click focused
-  // nothing editable, type into the observed field.
+  // moves focus to a new input (an overlay or combobox). Use that input only
+  // when it belongs to the target: inside it, inside a popup it names with
+  // aria-controls or aria-owns, or inside a dialog or listbox that took focus
+  // on this click. Else type into the observed field.
   let active: Element | null = document.activeElement;
   while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
-  const editable = (e: Element | null): e is HTMLElement =>
-    e instanceof HTMLTextAreaElement || (e instanceof HTMLElement && e.isContentEditable) ||
-    (e instanceof HTMLInputElement && /^(text|search|email|url|tel|number|password|)$/.test(e.type));
-  const field = editable(active) ? active : window.__glinerFast?.nodes.get(node);
-  if (!field?.isConnected) return null;
+  const owned = (e: Element) => {
+    for (let n: Element | null = target; n; n = parent(n)) {
+      const root = n.getRootNode() as Document | ShadowRoot;
+      for (const id of `${n.getAttribute("aria-controls") ?? ""} ${n.getAttribute("aria-owns") ?? ""}`.split(/\s+/)) {
+        const box = id && root.getElementById(id);
+        if (box && within(e, box)) return true;
+      }
+    }
+    return false;
+  };
+  const popup = (e: Element) => e !== window.__focusBeforeClick &&
+    !!e.closest('dialog,[role="dialog"],[role="alertdialog"],[aria-modal="true"],[role="listbox"]');
+  const field = editable(active) && (within(active, target) || owned(active) || popup(active)) ? active : target;
+  if (!editable(field)) return null;
   const plain = field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement;
   const read = () => (plain ? field.value : field.textContent ?? "");
   field.focus({ preventScroll: true });
