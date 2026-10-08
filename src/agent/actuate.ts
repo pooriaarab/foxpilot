@@ -5,8 +5,8 @@
 // key, input and submit events still respond; what needs a real user gesture
 // (popups, native pickers, file dialogs, fullscreen) does not open.
 
-export type Target = { x: number; y: number; rect: { left: number; top: number; width: number; height: number } };
-type Acted = { kind: string; node?: number; value?: string };
+type Target = { x: number; y: number; rect: { left: number; top: number; width: number; height: number } };
+type Acted = { kind: string; node?: number; value?: string; offscreen?: boolean };
 
 declare global {
   interface Window {
@@ -21,61 +21,118 @@ declare global {
   }
 }
 
-/** Resolves the target node, checks it is visible, enabled and not covered, and returns its centre. */
-export function resolveTarget(action: Acted): Target | null {
+/**
+ * Acts on one observed node in a single call: scrolls it into view when it is
+ * offscreen, checks it is visible, enabled and not covered, outlines it when
+ * `label` is set and waits a moment so the outline shows, then clicks its
+ * centre. A select gets its option instead of a click. Returns false, before
+ * any input, when the target is gone, covered or not usable.
+ */
+export async function strike(action: Acted, label: string | null): Promise<boolean> {
+  /**
+   * Clicks the topmost element at (x, y) the way a mouse does: hover, press
+   * (which moves focus unless the page cancels it), release, click.
+   */
+  function clickAt(x: number, y: number): boolean {
+    let hit = document.elementFromPoint(x, y);
+    while (hit?.shadowRoot) { const inner = hit.shadowRoot.elementFromPoint(x, y); if (!inner || inner === hit) break; hit = inner; }
+    if (!hit) return false;
+    const at = hit;
+    // fillField reads this to tell a focus move made by this click from a stale one.
+    let before: Element | null = document.activeElement;
+    while (before?.shadowRoot?.activeElement) before = before.shadowRoot.activeElement;
+    window.__focusBeforeClick = before;
+    const mouse = { bubbles: true, cancelable: true, composed: true, view: window, clientX: x, clientY: y,
+      screenX: screenX + x, screenY: screenY + y, button: 0, detail: 1 };
+    const pointer = { ...mouse, pointerId: 1, pointerType: "mouse", isPrimary: true, width: 1, height: 1 };
+    const fire = (type: string, buttons: number, bubbles = true) => at.dispatchEvent(type.startsWith("pointer")
+      ? new PointerEvent(type, { ...pointer, buttons, bubbles }) : new MouseEvent(type, { ...mouse, buttons, bubbles }));
+    fire("pointerover", 0); fire("pointerenter", 0, false); fire("mouseover", 0); fire("mouseenter", 0, false);
+    fire("pointermove", 0); fire("mousemove", 0);
+    // A cancelled pointerdown suppresses the mouse events after it, not the click.
+    const mouseEvents = fire("pointerdown", 1);
+    if (mouseEvents && fire("mousedown", 1)) {
+      const focusable = 'a[href],area[href],button,input,select,textarea,summary,iframe,[tabindex],[contenteditable]:not([contenteditable="false"])';
+      let n: Element | null | undefined = at;
+      while (n && !(n.matches(focusable) && !n.matches(":disabled"))) n = n.parentElement || (n.parentNode as ShadowRoot | null)?.host;
+      if (n) (n as HTMLElement).focus({ preventScroll: true });
+      else (document.activeElement as HTMLElement | null)?.blur?.();
+    }
+    fire("pointerup", 0);
+    if (mouseEvents) fire("mouseup", 0);
+    fire("click", 0);
+    return true;
+  }
+
+  /**
+   * Shows what Zipline is about to touch: a ring around the element, a label
+   * for the action and a ripple at the click point. Drawn in a shadow root with
+   * pointer-events off, so it never intercepts input or reads as a control.
+   */
+  function markTarget(t: Target, label: string): boolean {
+    document.getElementById("zipline-action")?.remove();
+    const host = document.createElement("div");
+    host.id = "zipline-action";
+    host.style.cssText = "position:fixed;inset:0;z-index:2147483647;pointer-events:none";
+    const root = host.attachShadow({ mode: "open" });
+    // Built without innerHTML: pages that enforce Trusted Types (Google Flights)
+    // reject HTML strings, and a constructed stylesheet is not blocked by CSP.
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(".ring{position:fixed;border-radius:10px;outline:3px solid #2cc4ad;outline-offset:4px;background:rgba(44,196,173,.12);box-shadow:0 0 24px 4px rgba(44,196,173,.55);animation:in .18s ease-out}" +
+      ".tag{position:fixed;transform:translateY(-100%);margin-top:-10px;padding:3px 9px;border-radius:999px;background:#0f9d8a;color:#fff;" +
+      "font:600 12px/1.4 system-ui,-apple-system,sans-serif;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.35);max-width:420px;overflow:hidden;text-overflow:ellipsis}" +
+      ".dot{position:fixed;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;background:rgba(183,227,77,.9);animation:ripple .6s ease-out forwards}" +
+      "@keyframes in{from{opacity:0;transform:scale(1.06)}}" +
+      "@keyframes ripple{to{transform:scale(3.2);opacity:0}}" +
+      ".fade{transition:opacity .35s ease;opacity:0}");
+    root.adoptedStyleSheets = [sheet];
+    const [ring, tag, dot] = ["ring", "tag", "dot"].map((name) => {
+      const el = document.createElement("div");
+      el.className = name;
+      root.append(el);
+      return el;
+    }) as [HTMLDivElement, HTMLDivElement, HTMLDivElement];
+    Object.assign(ring.style, { left: t.rect.left + "px", top: t.rect.top + "px", width: t.rect.width + "px", height: t.rect.height + "px" });
+    Object.assign(tag.style, { left: t.rect.left + "px", top: t.rect.top + "px" });
+    Object.assign(dot.style, { left: t.x + "px", top: t.y + "px" });
+    tag.textContent = "⚡ " + label;
+    document.documentElement.append(host);
+    setTimeout(() => root.querySelectorAll(".ring,.tag").forEach((e) => e.classList.add("fade")), 650);
+    setTimeout(() => host.remove(), 1100);
+    return true;
+  }
+
   const e = window.__glinerFast?.nodes.get(action.node!);
+  if (action.offscreen && e?.isConnected) {
+    e.scrollIntoView({ block: "center", inline: "center" });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
   if (!e?.isConnected || e.matches(":disabled") || e.closest('[aria-disabled="true"],[inert]') ||
-      !e.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) return null;
-  if (action.kind === "fill" && ((e as HTMLInputElement).readOnly || e.getAttribute("aria-readonly") === "true")) return null;
+      !e.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) return false;
+  if (action.kind === "fill" && ((e as HTMLInputElement).readOnly || e.getAttribute("aria-readonly") === "true")) return false;
   const r = e.getBoundingClientRect(), x = r.x + r.width / 2, y = r.y + r.height / 2;
-  if (!r.width || !r.height || x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) return null;
+  if (!r.width || !r.height || x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) return false;
   let hit = document.elementFromPoint(x, y);
   while (hit?.shadowRoot) { const inner = hit.shadowRoot.elementFromPoint(x, y); if (!inner || inner === hit) break; hit = inner; }
   const path: Node[] = [];
   for (let n: Node | null | undefined = hit; n; n = (n as Element).parentElement || (n.parentNode as ShadowRoot | null)?.host) path.push(n);
-  if (!path.includes(e)) return null;
+  if (!path.includes(e)) return false;
   if (action.kind === "select") {
     const select = e as HTMLSelectElement;
-    if (e.tagName !== "SELECT" || ![...select.options].some((o) => o.value === action.value && !o.disabled && !o.closest("optgroup[disabled]"))) return null;
+    if (e.tagName !== "SELECT" || ![...select.options].some((o) => o.value === action.value && !o.disabled && !o.closest("optgroup[disabled]"))) return false;
     select.value = action.value!;
     e.dispatchEvent(new Event("input", { bubbles: true }));
     e.dispatchEvent(new Event("change", { bubbles: true }));
   }
-  return { x, y, rect: { left: r.left, top: r.top, width: r.width, height: r.height } };
-}
-
-/**
- * Clicks the topmost element at (x, y) the way a mouse does: hover, press
- * (which moves focus unless the page cancels it), release, click.
- */
-export function clickAt(x: number, y: number): boolean {
-  let hit = document.elementFromPoint(x, y);
-  while (hit?.shadowRoot) { const inner = hit.shadowRoot.elementFromPoint(x, y); if (!inner || inner === hit) break; hit = inner; }
-  if (!hit) return false;
-  const at = hit;
-  // fillField reads this to tell a focus move made by this click from a stale one.
-  let before: Element | null = document.activeElement;
-  while (before?.shadowRoot?.activeElement) before = before.shadowRoot.activeElement;
-  window.__focusBeforeClick = before;
-  const mouse = { bubbles: true, cancelable: true, composed: true, view: window, clientX: x, clientY: y,
-    screenX: screenX + x, screenY: screenY + y, button: 0, detail: 1 };
-  const pointer = { ...mouse, pointerId: 1, pointerType: "mouse", isPrimary: true, width: 1, height: 1 };
-  const fire = (type: string, buttons: number, bubbles = true) => at.dispatchEvent(type.startsWith("pointer")
-    ? new PointerEvent(type, { ...pointer, buttons, bubbles }) : new MouseEvent(type, { ...mouse, buttons, bubbles }));
-  fire("pointerover", 0); fire("pointerenter", 0, false); fire("mouseover", 0); fire("mouseenter", 0, false);
-  fire("pointermove", 0); fire("mousemove", 0);
-  // A cancelled pointerdown suppresses the mouse events after it, not the click.
-  const mouseEvents = fire("pointerdown", 1);
-  if (mouseEvents && fire("mousedown", 1)) {
-    const focusable = 'a[href],area[href],button,input,select,textarea,summary,iframe,[tabindex],[contenteditable]:not([contenteditable="false"])';
-    let n: Element | null | undefined = at;
-    while (n && !(n.matches(focusable) && !n.matches(":disabled"))) n = n.parentElement || (n.parentNode as ShadowRoot | null)?.host;
-    if (n) (n as HTMLElement).focus({ preventScroll: true });
-    else (document.activeElement as HTMLElement | null)?.blur?.();
+  if (label) {
+    try {
+      markTarget({ x, y, rect: { left: r.left, top: r.top, width: r.width, height: r.height } }, label);
+    } catch {
+      // the outline is only feedback
+    }
+    await new Promise((resolve) => setTimeout(resolve, 120));
   }
-  fire("pointerup", 0);
-  if (mouseEvents) fire("mouseup", 0);
-  fire("click", 0);
+  if (action.kind !== "select") clickAt(x, y);
   return true;
 }
 
@@ -180,43 +237,5 @@ export function scrollAt(delta: number): boolean {
     }
   }
   scrollBy({ top: delta, behavior: "instant" });
-  return true;
-}
-
-/**
- * Shows what Zipline is about to touch: a ring around the element, a label
- * for the action and a ripple at the click point. Drawn in a shadow root with
- * pointer-events off, so it never intercepts input or reads as a control.
- */
-export function markTarget(t: Target, label: string): boolean {
-  document.getElementById("zipline-action")?.remove();
-  const host = document.createElement("div");
-  host.id = "zipline-action";
-  host.style.cssText = "position:fixed;inset:0;z-index:2147483647;pointer-events:none";
-  const root = host.attachShadow({ mode: "open" });
-  // Built without innerHTML: pages that enforce Trusted Types (Google Flights)
-  // reject HTML strings, and a constructed stylesheet is not blocked by CSP.
-  const sheet = new CSSStyleSheet();
-  sheet.replaceSync(".ring{position:fixed;border-radius:10px;outline:3px solid #2cc4ad;outline-offset:4px;background:rgba(44,196,173,.12);box-shadow:0 0 24px 4px rgba(44,196,173,.55);animation:in .18s ease-out}" +
-    ".tag{position:fixed;transform:translateY(-100%);margin-top:-10px;padding:3px 9px;border-radius:999px;background:#0f9d8a;color:#fff;" +
-    "font:600 12px/1.4 system-ui,-apple-system,sans-serif;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.35);max-width:420px;overflow:hidden;text-overflow:ellipsis}" +
-    ".dot{position:fixed;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;background:rgba(183,227,77,.9);animation:ripple .6s ease-out forwards}" +
-    "@keyframes in{from{opacity:0;transform:scale(1.06)}}" +
-    "@keyframes ripple{to{transform:scale(3.2);opacity:0}}" +
-    ".fade{transition:opacity .35s ease;opacity:0}");
-  root.adoptedStyleSheets = [sheet];
-  const [ring, tag, dot] = ["ring", "tag", "dot"].map((name) => {
-    const el = document.createElement("div");
-    el.className = name;
-    root.append(el);
-    return el;
-  }) as [HTMLDivElement, HTMLDivElement, HTMLDivElement];
-  Object.assign(ring.style, { left: t.rect.left + "px", top: t.rect.top + "px", width: t.rect.width + "px", height: t.rect.height + "px" });
-  Object.assign(tag.style, { left: t.rect.left + "px", top: t.rect.top + "px" });
-  Object.assign(dot.style, { left: t.x + "px", top: t.y + "px" });
-  tag.textContent = "⚡ " + label;
-  document.documentElement.append(host);
-  setTimeout(() => root.querySelectorAll(".ring,.tag").forEach((e) => e.classList.add("fade")), 650);
-  setTimeout(() => host.remove(), 1100);
   return true;
 }
