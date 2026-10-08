@@ -1,8 +1,8 @@
 {
-  "name": "zipline",
+  "name": "foxpilot",
   "version": "0.1.0",
   "private": true,
-  "description": "Zipline: a browser agent that runs entirely in Chrome, with GLiNER2 (and an optional small LLM) on WebGPU",
+  "description": "foxpilot: a browser agent that runs entirely in Firefox, with GLiNER2 (and an optional small LLM) on WebGPU",
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",

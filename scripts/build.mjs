@@ -31,7 +31,7 @@ const snapshotAsText = {
 const common = {
   bundle: true,
   format: "esm",
-  target: "chrome116",
+  target: "firefox157",
   minify: !watch,
   sourcemap: watch ? "inline" : false,
   logLevel: "info",
