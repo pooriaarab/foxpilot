@@ -43,6 +43,12 @@ for (const [what, path] of [["Firefox", FIREFOX], ["the built extension (run pnp
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// BiDi does not report navigation events for moz-extension: pages, so goto()
+// never resolves there. Start it, then wait until the page itself reports the URL.
+async function openExtensionPage(page, target) {
+  page.goto(target, { timeout: 0 }).catch(() => {});
+  await page.waitForFunction((u) => location.href === u && document.readyState === "complete", { timeout: 30_000, polling: 250 }, target);
+}
 const git = (...a) => { try { return execFileSync("git", a, { cwd: root, encoding: "utf8" }).trim(); } catch { return "unknown"; } };
 const stamp = new Date().toISOString().replace(/[:.]/g, "-");
 const out = join(root, "artifacts");
@@ -56,6 +62,8 @@ const browser = await puppeteer.launch({
   executablePath: FIREFOX,
   headless, // WebGPU needs a headed Firefox
   userDataDir: profile,
+  // BiDi refuses to touch moz-extension: pages without system access.
+  args: ["-remote-allow-system-access"],
   defaultViewport: null,
   extraPrefsFirefox: { "extensions.webextensions.uuids": JSON.stringify({ [GECKO_ID]: UUID }) },
 });
@@ -72,13 +80,13 @@ try {
   const panelUrl = `moz-extension://${UUID}/sidepanel.html`;
   const panel = await browser.newPage();
   panel.on("console", (m) => { if (m.type() === "error") console.log("[panel]", m.text()); });
-  await panel.goto(panelUrl);
+  await openExtensionPage(panel, panelUrl);
   const tabId = await panel.evaluate(async () => {
     const tabs = await chrome.tabs.query({});
     return tabs.find((t) => t.url && !t.url.startsWith("moz-extension:") && !t.url.startsWith("about:"))?.id;
   });
   if (!tabId) throw new Error("Cannot find the task tab from the panel.");
-  await panel.goto(`${panelUrl}?tab=${tabId}`);
+  await openExtensionPage(panel, `${panelUrl}?tab=${tabId}`);
 
   await panel.waitForFunction(() => /Ready|Failed/.test(document.getElementById("gliner-status")?.textContent ?? ""), { timeout: 600_000 });
   const glinerStatus = await panel.$eval("#gliner-status", (e) => e.textContent ?? "");
