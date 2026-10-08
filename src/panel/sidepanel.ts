@@ -279,7 +279,7 @@ async function run() {
     let opened = false;
     browser = await attachOrOpenStart(tabId);
     if (site) {
-      // The page's own location, read through the debugger (tab URLs need the "tabs" permission).
+      // The page's own location, read by a script injected into the tab (tab URLs need the "tabs" permission).
       const here = await browser.evaluate<string>("location.href").catch(() => "");
       if (!onSite(here, site)) {
         $("clock-sub").textContent = `Opening ${site.host}…`;
