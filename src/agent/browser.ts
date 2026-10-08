@@ -6,11 +6,10 @@
 // Everything runs in the extension's isolated world of the tab. Page CSP and
 // Trusted Types do not apply there, page scripts cannot change its globals,
 // and Firefox keeps one isolated world per document, so snapshot.js's
-// window.__glinerFast cache stays between calls.
-import { snapshot } from "./snapshot.js";
-import type { Action, Page } from "./types";
-import { settle } from "./settle";
-import { fillField, pressKey, scrollAt, strike } from "./actuate";
+// window.__glinerFast cache stays between calls. The page kit (kit.ts) is
+// injected once per document and answers calls over a runtime.Port.
+import { KIT_PORT, type Action, type Page } from "./types";
+import type { Kit, KitCall, KitReply } from "./kit";
 
 export class StalePage extends Error {}
 
@@ -36,22 +35,11 @@ export function nameInjected(functions: Record<string, Injected>): void {
   for (const [name, func] of Object.entries(functions)) names.set(func, name);
 }
 
-function attached() { return true; }
-
-function readyState() { return document.readyState; }
-
-function nodeGuard(node: number) {
-  const c = window.__glinerFast;
-  return c ? [c.pageKey(), c.guard(c.nodes.get(node))] : null;
-}
-
-nameInjected({ attached, readyState, nodeGuard, snapshot, settle, fillField, pressKey, scrollAt, strike });
-
 export class TabBrowser {
   private afterInput: Action | null = null;
   /** Outline each element before acting on it. */
   showActions = true;
-  /** Every `evaluate` call since attaching, by function name. */
+  /** Every page call since attaching, by function name; `kit` counts kit injections. */
   readonly calls: Record<string, Calls> = {};
   /** Which check failed when `fresh` last returned false. */
   stale = "";
@@ -61,23 +49,39 @@ export class TabBrowser {
   /** Main-frame loads started since attaching, and whether one is in progress. */
   navigations = 0;
   loading = false;
+  /** Waits from `until`, checked again on every load event. */
+  private waiting = new Set<() => void>();
   private started = ({ tabId, frameId }: FrameEvent) => {
     if (tabId !== this.tabId || frameId !== 0) return;
     this.navigations++;
     this.loading = true;
+    this.waiting.forEach((check) => check());
   };
   private stopped = ({ tabId, frameId }: FrameEvent) => {
-    if (tabId === this.tabId && frameId === 0) this.loading = false;
+    if (tabId !== this.tabId || frameId !== 0) return;
+    this.loading = false;
+    this.waiting.forEach((check) => check());
   };
+  // A new document has no kit yet, and the old one's port is dead even when
+  // the page went into the back-forward cache instead of unloading.
+  private committed = ({ tabId, frameId }: FrameEvent) => {
+    if (tabId === this.tabId && frameId === 0) this.drop("Document changed");
+  };
+
+  /** The port to the current document's kit, and its unanswered calls. */
+  private port: chrome.runtime.Port | null = null;
+  private pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
+  private nextId = 1;
 
   static async attach(tabId: number): Promise<TabBrowser> {
     const browser = new TabBrowser(tabId);
     // Fails here, not mid-run, when the page cannot be scripted. The panel decides from the URL what to do.
-    await browser.evaluate(attached).catch((error: Error) => {
+    await browser.connect().catch((error: Error) => {
       throw new Error(`Cannot attach to this page: ${error.message}`);
     });
     // Load events tell a search that navigates (Amazon) from one that updates in place.
     chrome.webNavigation.onBeforeNavigate.addListener(browser.started);
+    chrome.webNavigation.onCommitted.addListener(browser.committed);
     chrome.webNavigation.onCompleted.addListener(browser.stopped);
     chrome.webNavigation.onErrorOccurred.addListener(browser.stopped);
     return browser;
@@ -85,8 +89,84 @@ export class TabBrowser {
 
   async detach(): Promise<void> {
     chrome.webNavigation.onBeforeNavigate.removeListener(this.started);
+    chrome.webNavigation.onCommitted.removeListener(this.committed);
     chrome.webNavigation.onCompleted.removeListener(this.stopped);
     chrome.webNavigation.onErrorOccurred.removeListener(this.stopped);
+    this.drop("Detached");
+  }
+
+  /** Injects the kit into the current document and opens a port to it. */
+  private async connect(): Promise<chrome.runtime.Port> {
+    const calls = (this.calls.kit ??= { count: 0, ms: 0 });
+    const started = performance.now();
+    try {
+      await chrome.scripting.executeScript({ target: { tabId: this.tabId }, world: "ISOLATED", injectImmediately: true, files: ["kit.js"] });
+    } finally {
+      calls.count++;
+      calls.ms += performance.now() - started;
+    }
+    const port = chrome.tabs.connect(this.tabId, { name: KIT_PORT, frameId: 0 });
+    port.onMessage.addListener(({ id, result, error }: KitReply) => {
+      const call = this.pending.get(id);
+      if (!call) return;
+      this.pending.delete(id);
+      if (error === undefined) call.resolve(result);
+      else call.reject(new StalePage(`Document changed during evaluation (${error})`));
+    });
+    port.onDisconnect.addListener(() => {
+      // Firefox puts the reason (no kit in this document, page unloaded) on port.error.
+      if (this.port === port) this.drop(`Document changed (${(port as { error?: Error }).error?.message ?? "port closed"})`);
+    });
+    this.port = port;
+    return port;
+  }
+
+  /** Closes the port and fails its unanswered calls; the next call injects the kit again. */
+  private drop(reason: string): void {
+    const port = this.port;
+    this.port = null;
+    port?.disconnect();
+    for (const call of this.pending.values()) call.reject(new StalePage(reason));
+    this.pending.clear();
+  }
+
+  /** Runs a kit function in the tab's top frame, injecting the kit first when this document has none. */
+  async call<K extends keyof Kit>(name: K, ...args: Parameters<Kit[K]>): Promise<Awaited<ReturnType<Kit[K]>>> {
+    let port = this.port;
+    if (!port) {
+      try {
+        port = await this.connect();
+      } catch (error) {
+        throw new StalePage(`Document changed during evaluation (${error instanceof Error ? error.message : String(error)})`);
+      }
+    }
+    const calls = (this.calls[name] ??= { count: 0, ms: 0 });
+    const started = performance.now();
+    const id = this.nextId++;
+    try {
+      return await new Promise<Awaited<ReturnType<Kit[K]>>>((resolve, reject) => {
+        this.pending.set(id, { resolve: resolve as (value: unknown) => void, reject });
+        port.postMessage({ id, name, args } satisfies KitCall);
+      });
+    } finally {
+      calls.count++;
+      calls.ms += performance.now() - started;
+    }
+  }
+
+  /** Waits until `done()` holds or `ms` pass. Load events check it; nothing polls. */
+  private until(done: () => boolean, ms: number): Promise<void> {
+    if (done() || ms <= 0) return Promise.resolve();
+    return new Promise((resolve) => {
+      const finish = () => {
+        clearTimeout(timer);
+        this.waiting.delete(check);
+        resolve();
+      };
+      const check = () => { if (done()) finish(); };
+      const timer = setTimeout(finish, ms);
+      this.waiting.add(check);
+    });
   }
 
   /** Loads a URL in the tab and waits for it. */
@@ -98,20 +178,20 @@ export class TabBrowser {
 
   /**
    * After a send: if the page starts loading a new document within `startMs`,
-   * wait for it to finish (up to `maxMs`). Returns whether one loaded.
+   * wait for its load event (webNavigation.onCompleted, up to `maxMs`). Returns whether one loaded.
    */
   async settleNavigation(since: number, startMs = 150, maxMs = 8000): Promise<boolean> {
     const start = performance.now();
-    while (this.navigations === since && performance.now() - start < startMs) await sleep(50);
+    await this.until(() => this.navigations !== since, startMs);
     if (this.navigations === since) return false;
-    while (this.loading && performance.now() - start < maxMs) await sleep(50);
-    await this.waitForLoad(Math.max(0, maxMs - (performance.now() - start)));
+    await this.until(() => !this.loading, maxMs - (performance.now() - start));
     return true;
   }
 
   /**
    * Runs `func` in the tab's top frame with JSON `args`; a promise it returns is awaited.
    * Firefox sends only the source of `func`, so it must use nothing from module scope.
+   * For one-off calls; the calls of every step go to the kit through `call`.
    */
   async evaluate<A extends unknown[], T>(func: (...args: A) => T, ...args: A): Promise<Awaited<T>> {
     let results: { result?: unknown; error?: unknown }[];
@@ -131,32 +211,20 @@ export class TabBrowser {
     return first.result as Awaited<T>;
   }
 
-  async waitForLoad(timeoutMs = 15_000): Promise<void> {
-    const deadline = performance.now() + timeoutMs;
-    while (performance.now() < deadline) {
-      try {
-        if ((await this.evaluate(readyState)) === "complete") return;
-      } catch {
-        // navigating
-      }
-      await sleep(50);
-    }
-  }
-
   /** Reads the page. After input, or with `quiet`, first waits for it to settle. */
   async observe(quiet = false): Promise<Page> {
     const action = this.afterInput ?? (quiet ? ({ id: "", kind: "wait", label: "" } as Action) : null);
     if (action) {
       this.afterInput = null;
       try {
-        await this.evaluate(settle, action);
+        await this.call("settle", action);
       } catch {
         // navigation interrupted the wait; observe anyway
       }
     }
     for (let attempt = 0; attempt < 10; attempt++) {
       try {
-        const info = await this.evaluate(snapshot);
+        const info = await this.call("snapshot");
         if (!info) throw new StalePage("Document is navigating");
         info.fingerprint = await fingerprint(info);
         return info;
@@ -172,12 +240,12 @@ export class TabBrowser {
   async fresh(page: Page, action?: Action): Promise<boolean> {
     if (action && (action.kind === "click" || action.kind === "select")) {
       if (typeof action.node !== "number") return this.failed("no node");
-      const current = await this.evaluate(nodeGuard, action.node);
+      const current = await this.call("nodeGuard", action.node);
       if (!current) return this.failed("node gone");
       if (!sameValue(current[1], page.guards[String(action.node)])) return this.failed("guard");
       return unchanged(page.page_key, current[0] as unknown[]) || this.failed("page key");
     }
-    return sameValue((await this.evaluate(snapshot))?.marker ?? null, page.marker) || this.failed("marker");
+    return sameValue((await this.call("snapshot"))?.marker ?? null, page.marker) || this.failed("marker");
   }
 
   private failed(check: string): false {
@@ -195,17 +263,17 @@ export class TabBrowser {
     if (kind === "wait") {
       await sleep(600);
     } else if (kind === "scroll") {
-      await this.evaluate(scrollAt, action.delta ?? 0);
+      await this.call("scrollAt", action.delta ?? 0);
     } else if (kind === "key") {
-      await this.evaluate(pressKey, "Enter");
+      await this.call("pressKey", "Enter");
     } else {
       if (typeof action.node !== "number") throw new Error("Invalid observed node");
       // One call resolves, outlines, waits and clicks, right after the stale check above.
-      if (!(await this.evaluate(strike, action, this.showActions ? actionLabel(action, text) : null))) {
+      if (!(await this.call("strike", action, this.showActions ? actionLabel(action, text) : null))) {
         if (kind === "select") throw new Error("Dropdown execution was not confirmed; inspect before retrying.");
         throw new StalePage("Target changed or is covered. Observe again.");
       }
-      if (kind === "fill" && (await this.evaluate(fillField, action.node, text ?? "")) == null) {
+      if (kind === "fill" && (await this.call("fillField", action.node, text ?? "")) == null) {
         throw new StalePage("Field went away before typing. Observe again.");
       }
     }

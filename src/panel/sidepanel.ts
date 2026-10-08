@@ -76,9 +76,7 @@ async function attachOrOpenStart(tabId: number): Promise<TabBrowser> {
   if (!RESTRICTED_URL.test(tab.url ?? "")) return TabBrowser.attach(tabId);
   $("clock-sub").textContent = "This page can't be driven; opening google.com…";
   await navigateAndWait(tabId, START_PAGE);
-  const browser = await TabBrowser.attach(tabId);
-  await browser.waitForLoad();
-  return browser;
+  return TabBrowser.attach(tabId);
 }
 
 function navigateAndWait(tabId: number, url: string): Promise<void> {
