@@ -2,6 +2,7 @@
   "name": "foxpilot",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@10.11.0",
   "description": "foxpilot: a browser agent that runs entirely in Firefox, with GLiNER2 (and an optional small LLM) on WebGPU",
   "type": "module",
   "scripts": {
@@ -9,6 +10,8 @@
     "test": "vitest run",
     "build": "node scripts/build.mjs",
     "watch": "node scripts/build.mjs --watch",
+    "lint:ext": "web-ext lint -s dist",
+    "ci:local": "pnpm typecheck && pnpm test && pnpm build && pnpm lint:ext",
     "e2e": "pnpm build && node scripts/e2e.mjs"
   },
   "license": "MIT",
@@ -22,6 +25,7 @@
     "playwright": "1.63.0",
     "puppeteer": "^25.13.0",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.1"
+    "vitest": "^5.0.1",
+    "web-ext": "^10.7.0"
   }
 }
