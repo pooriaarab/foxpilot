@@ -202,7 +202,9 @@ export class Agent {
       this.fruitless += 1;
       this.view.decision = null;
       this.view.status = "ready";
-      this.page = await this.browser.observe();
+      // The page was still moving. Read it once it is quiet: if its labels are
+      // the same, every score is in memory and the redo costs no model call.
+      this.page = await this.browser.observe(true);
     }
   }
 

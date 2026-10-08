@@ -2,7 +2,7 @@
 // scripting.executeScript sends only the function's source, so it uses nothing from module scope.
 import type { Action } from "./types";
 
-/** Waits after input: for autocomplete options to render, or a couple of frames. */
+/** Waits after input: for autocomplete options to render, or a couple of frames; then for a quiet DOM. */
 export function settle(action: Action): Promise<void> { return new Promise(resolve => {
   const field=window.__glinerFast?.nodes.get(action.node!);
   const autocomplete=action.kind==='fill' && (field?.getAttribute('role')==='combobox' ||
@@ -20,7 +20,21 @@ export function settle(action: Action): Promise<void> { return new Promise(resol
   const gone=()=>!dialogRoot!.isConnected || !dialogRoot!.checkVisibility({checkOpacity:true,checkVisibilityCSS:true}) ||
     parseFloat(getComputedStyle(dialogRoot!).opacity)<0.05;
   let frames=0, stopped=false; const started=performance.now();
-  const finish=()=>{stopped=true;resolve()};
+  // Zipline addition: then wait for about 120 ms with no DOM change, so a page
+  // that is still drawing is not read and refused 1–4 s later. A page that never
+  // stops (map animations, tickers) is read at the cap. The action outline
+  // (markTarget's #zipline-action) is not the page and does not count.
+  let last=started;
+  const observer=new MutationObserver(records=>{
+    if (records.some(r=>![...r.addedNodes,...r.removedNodes].some(n=>(n as Element).id==='zipline-action'))) last=performance.now();
+  });
+  observer.observe(document.documentElement,{subtree:true,childList:true,attributes:true,characterData:true});
+  const quiet=()=>{
+    const now=performance.now();
+    if (now-last<120 && now-started<1200) { setTimeout(quiet,Math.min(120-(now-last),1200-(now-started))); return; }
+    observer.disconnect(); resolve();
+  };
+  const finish=()=>{if (stopped) return; stopped=true; quiet()};
   setTimeout(finish,autocomplete ? 600 : menu || closing ? 800 : 250);
   const ready=()=>{
     if (stopped) return;
