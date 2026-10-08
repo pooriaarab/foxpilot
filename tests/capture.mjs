@@ -1,9 +1,9 @@
 // Captures snapshot.js observations of real pages for controller parity tests.
 // Usage: node tests/capture.mjs  → tests/fixtures/*.json
-import { readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { chromium } from "playwright";
+import { snapshot } from "../src/agent/snapshot.js";
 
-const SNAPSHOT = readFileSync(new URL("../src/agent/snapshot.js", import.meta.url), "utf8");
 const out = (name, state, extra = {}) => {
   writeFileSync(new URL(`fixtures/${name}.json`, import.meta.url), JSON.stringify({ ...extra, state }, null, 1));
   console.log(name, state.actions.length, "actions", state.title);
@@ -11,7 +11,7 @@ const out = (name, state, extra = {}) => {
 
 const browser = await chromium.launch({ headless: false });
 const page = await browser.newPage({ viewport: { width: 1120, height: 780 }, locale: "en-US" });
-const observe = () => page.evaluate(SNAPSHOT);
+const observe = () => page.evaluate(snapshot);
 
 await page.goto("https://www.google.com/travel/flights?hl=en", { waitUntil: "domcontentloaded" });
 await page.waitForTimeout(3500);

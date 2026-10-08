@@ -1,6 +1,6 @@
 // Bundles the extension into dist/. Pass --watch to rebuild on change.
 import * as esbuild from "esbuild";
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, realpathSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -20,14 +20,6 @@ for (const file of readdirSync(ortDist)) {
   if (/^ort-wasm-simd-threaded\.asyncify\.(mjs|wasm)$/.test(file)) cpSync(join(ortDist, file), join(dist, "ort", file));
 }
 
-// snapshot.js runs inside the page via Runtime.evaluate, so it is bundled as a string.
-const snapshotAsText = {
-  name: "snapshot-as-text",
-  setup(build) {
-    build.onLoad({ filter: /snapshot\.js$/ }, (args) => ({ contents: readFileSync(args.path, "utf8"), loader: "text" }));
-  },
-};
-
 const common = {
   bundle: true,
   format: "esm",
@@ -37,7 +29,6 @@ const common = {
   logLevel: "info",
   outdir: dist,
   absWorkingDir: root,
-  plugins: [snapshotAsText],
   alias: { "@huggingface/transformers": join(transformersDir, "dist/transformers.web.js") },
 };
 const entries = [{ sidepanel: "src/panel/sidepanel.ts" }, { background: "src/background/background.ts" }];
