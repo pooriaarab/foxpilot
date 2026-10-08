@@ -71,6 +71,14 @@ export function snapshot() {
     }
     return null;
   };
+  // A context-menu run limits the page to one element. A scope that left the page is dropped.
+  if (cache.scope && !cache.scope.isConnected) cache.scope=null;
+  const root = cache.scope || document;
+  const controls = (r, sel) => {
+    const out = deep(r, sel);
+    if (r!==document && r.matches(sel)) out.push(r);
+    return out;
+  };
   cache.pageKey=()=>[performance.timeOrigin,location.href,scrollX,scrollY,innerWidth,innerHeight,
     // Only fields that are actually on screen. Component sites mount hidden
     // inputs as they hydrate, and counting those makes this key change on its
@@ -88,7 +96,7 @@ export function snapshot() {
   // Associate autocomplete popups using the page's ARIA relationships, not
   // site-specific markup. A grid popup and a listbox are both valid patterns.
   const popups=[];
-  for (const input of deep(document,'input,textarea,[contenteditable="true"]')) {
+  for (const input of controls(root,'input,textarea,[contenteditable="true"]')) {
     if (!safe(input) || !visible(input)) continue;
     const combo=input.closest('[role="combobox"]');
     const ids=[input,combo].filter(Boolean).flatMap(e=>
@@ -99,7 +107,10 @@ export function snapshot() {
     }
   }
   const actions=[]; let fields=0, links=0;
-  for (const e of deep(document, selector)) {
+  // Inside a scope, offer the scope's own controls and the popups its fields open.
+  const inScope = controls(root, selector);
+  if (root!==document) for (const {popup} of popups) inScope.push(...deep(popup, selector));
+  for (const e of new Set(inScope)) {
     if (!safe(e) || !visible(e) || e.matches(':disabled') || e.closest('[aria-disabled="true"]')) continue;
     const r=e.getBoundingClientRect(), x=r.x+r.width/2, y=r.y+r.height/2, rname=role(e);
     if (!rname || r.width<=0 || r.height<=0) continue;
