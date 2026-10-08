@@ -7,26 +7,14 @@
 // Trusted Types do not apply there, page scripts cannot change its globals,
 // and Firefox keeps one isolated world per document, so snapshot.js's
 // window.__glinerFast cache stays between calls.
-import SNAPSHOT from "./snapshot.js";
+import { snapshot } from "./snapshot.js";
 import type { Action, Page } from "./types";
-import { SETTLE } from "./settle";
+import { settle } from "./settle";
 import { clickAt, fillField, markTarget, pressKey, resolveTarget, scrollAt } from "./actuate";
 
 export class StalePage extends Error {}
 
-const MARKER = `(() => { const state=${SNAPSHOT}; return state?.marker ?? null; })()`;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-/**
- * A function whose source is `expression`. Firefox injects `func.toString()`,
- * so text modules (snapshot.js, SETTLE) run as injected code, not through the
- * page's eval, which strict CSP blocks.
- */
-function source(expression: string): () => unknown {
-  const func = () => undefined;
-  func.toString = () => `() => (${expression})`;
-  return func;
-}
 
 function actionLabel(action: Action, text?: string | null): string {
   if (action.kind === "fill") return `type "${(text ?? "").slice(0, 40)}"`;
@@ -58,7 +46,7 @@ export class TabBrowser {
   static async attach(tabId: number): Promise<TabBrowser> {
     const browser = new TabBrowser(tabId);
     // Fails here, not mid-run, on pages extensions may not script (about:, addons.mozilla.org).
-    await browser.run(() => true).catch((error: Error) => {
+    await browser.evaluate(() => true).catch((error: Error) => {
       throw new Error(`Cannot access this page (${error.message})`);
     });
     // Load events tell a search that navigates (Amazon) from one that updates in place.
@@ -94,8 +82,11 @@ export class TabBrowser {
     return true;
   }
 
-  /** Runs `func` in the tab's top frame with JSON `args`; a promise it returns is awaited. */
-  private async run<A extends unknown[], T>(func: (...args: A) => T, ...args: A): Promise<Awaited<T>> {
+  /**
+   * Runs `func` in the tab's top frame with JSON `args`; a promise it returns is awaited.
+   * Firefox sends only the source of `func`, so it must use nothing from module scope.
+   */
+  async evaluate<A extends unknown[], T>(func: (...args: A) => T, ...args: A): Promise<Awaited<T>> {
     let results: { result?: unknown; error?: unknown }[];
     try {
       results = await chrome.scripting.executeScript({ target: { tabId: this.tabId }, world: "ISOLATED", injectImmediately: true, func, args });
@@ -108,16 +99,11 @@ export class TabBrowser {
     return first.result as Awaited<T>;
   }
 
-  /** Evaluates a JavaScript expression in the tab; a promise it gives is awaited. */
-  async evaluate<T = unknown>(expression: string): Promise<T> {
-    return (await this.run(source(expression))) as T;
-  }
-
   async waitForLoad(timeoutMs = 15_000): Promise<void> {
     const deadline = performance.now() + timeoutMs;
     while (performance.now() < deadline) {
       try {
-        if ((await this.run(() => document.readyState)) === "complete") return;
+        if ((await this.evaluate(() => document.readyState)) === "complete") return;
       } catch {
         // navigating
       }
@@ -130,14 +116,14 @@ export class TabBrowser {
       const action = this.afterInput;
       this.afterInput = null;
       try {
-        await this.evaluate(`${SETTLE}(${JSON.stringify(action)})`);
+        await this.evaluate(settle, action);
       } catch {
         // navigation interrupted the wait; observe anyway
       }
     }
     for (let attempt = 0; attempt < 10; attempt++) {
       try {
-        const info = await this.evaluate<Page | null>(SNAPSHOT);
+        const info = await this.evaluate(snapshot);
         if (!info) throw new StalePage("Document is navigating");
         info.fingerprint = await fingerprint(info);
         return info;
@@ -152,14 +138,14 @@ export class TabBrowser {
   async fresh(page: Page, action?: Action): Promise<boolean> {
     if (action && (action.kind === "click" || action.kind === "select")) {
       if (typeof action.node !== "number") return false;
-      const current = await this.run((node: number) => {
+      const current = await this.evaluate((node: number) => {
         const c = window.__glinerFast;
         return c ? [c.pageKey(), c.guard(c.nodes.get(node))] : null;
       }, action.node);
       if (!current || !sameValue(current[1], page.guards[String(action.node)])) return false;
       return unchanged(page.page_key, current[0] as unknown[]);
     }
-    return sameValue(await this.evaluate(MARKER), page.marker);
+    return sameValue((await this.evaluate(snapshot))?.marker ?? null, page.marker);
   }
 
   async act(action: Action, page: Page, text?: string | null): Promise<void> {
@@ -172,30 +158,30 @@ export class TabBrowser {
     if (kind === "wait") {
       await sleep(600);
     } else if (kind === "scroll") {
-      await this.run(scrollAt, action.delta ?? 0);
+      await this.evaluate(scrollAt, action.delta ?? 0);
     } else if (kind === "key") {
-      await this.run(pressKey, "Enter");
+      await this.evaluate(pressKey, "Enter");
     } else {
       if (typeof action.node !== "number") throw new Error("Invalid observed node");
       if (action.offscreen) {
-        await this.run((node: number) => {
+        await this.evaluate((node: number) => {
           window.__glinerFast?.nodes.get(node)?.scrollIntoView({ block: "center", inline: "center" });
           return true;
         }, action.node);
         await sleep(50);
       }
-      const target = await this.run(resolveTarget, action);
+      const target = await this.evaluate(resolveTarget, action);
       if (!target) {
         if (kind === "select") throw new Error("Dropdown execution was not confirmed; inspect before retrying.");
         throw new StalePage("Target changed or is covered. Observe again.");
       }
       if (this.showActions) {
-        await this.run(markTarget, target, actionLabel(action, text)).catch(() => {});
+        await this.evaluate(markTarget, target, actionLabel(action, text)).catch(() => {});
         await sleep(120);
       }
       if (kind !== "select") {
-        await this.run(clickAt, target.x, target.y);
-        if (kind === "fill" && (await this.run(fillField, action.node, text ?? "")) == null) {
+        await this.evaluate(clickAt, target.x, target.y);
+        if (kind === "fill" && (await this.evaluate(fillField, action.node, text ?? "")) == null) {
           throw new StalePage("Field went away before typing. Observe again.");
         }
       }

@@ -30,7 +30,7 @@ describe.skipIf(!have)("answer highlight on fixtures", () => {
     await browser?.close();
     server?.close();
   });
-  const adapter = () => ({ evaluate: (expression: string) => page.evaluate(expression) }) as unknown as TabBrowser;
+  const adapter = () => ({ evaluate: (func: (...a: unknown[]) => unknown, ...args: unknown[]) => page.evaluate(`(${func})(...${JSON.stringify(args)})`) }) as unknown as TabBrowser;
   const chip = () => page.evaluate(() => document.getElementById("zipline-answer")?.shadowRoot?.querySelector(".chip")?.textContent ?? null);
 
   it("picks the cheapest morning flight, not the cheapest overall", async () => {

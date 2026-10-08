@@ -3,7 +3,7 @@
 import { env } from "@huggingface/transformers";
 import { Agent, type AgentView, type Step } from "../agent/agent";
 import { TabBrowser } from "../agent/browser";
-import { CLEAR, findAnswer, lastNote, lastRows, lastScores } from "../agent/answer";
+import { clear, findAnswer, lastNote, lastRows, lastScores } from "../agent/answer";
 import { LlmWriter, SpanWriter, type FieldWriter } from "../agent/fieldtext";
 import { verify, type Verdict } from "../agent/verify";
 import { onSite, siteIn, withoutSite } from "../agent/site";
@@ -280,7 +280,7 @@ async function run() {
     browser = await attachOrOpenStart(tabId);
     if (site) {
       // The page's own location, read by a script injected into the tab (tab URLs need the "tabs" permission).
-      const here = await browser.evaluate<string>("location.href").catch(() => "");
+      const here = await browser.evaluate(() => location.href).catch(() => "");
       if (!onSite(here, site)) {
         $("clock-sub").textContent = `Opening ${site.host}…`;
         await browser.navigate(site.url);
@@ -290,7 +290,7 @@ async function run() {
     }
     Object.assign(window, { __ziplineSite: site ? { ...site, opened } : null });
     const setup = performance.now();
-    await browser.evaluate(CLEAR).catch(() => {});
+    await browser.evaluate(clear).catch(() => {});
     const useLlm = llmToggle.checked && llm && llmReady;
     running = await Agent.create(
       gliner,
@@ -303,7 +303,7 @@ async function run() {
       },
     );
     const loopStart = performance.now();
-    const page = await browser.evaluate<{ url: string; title: string }>("({ url: location.href, title: document.title })").catch(() => null);
+    const page = await browser.evaluate(() => ({ url: location.href, title: document.title })).catch(() => null);
     Object.assign(window, { __ziplinePage: page });
     const view = await running.run();
     const loopEnd = performance.now();

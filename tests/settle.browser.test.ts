@@ -1,7 +1,7 @@
-// SETTLE in Chromium: after a picker's "Done", the page is read once the picker has gone.
+// settle() in Chromium: after a picker's "Done", the page is read once the picker has gone.
 import { chromium, type Browser } from "playwright";
 import { afterAll, beforeAll, expect, it } from "vitest";
-import { SETTLE } from "../src/agent/settle";
+import { settle } from "../src/agent/settle";
 
 let browser: Browser;
 beforeAll(async () => { browser = await chromium.launch(); });
@@ -21,13 +21,13 @@ it("waits for a closing picker, not for a click on a day", async () => {
   await page.setContent(PAGE);
   const day = await page.evaluate(async (settle) => {
     const t = performance.now(); await (0, eval)(settle)({ kind: "click", node: 2 }); return performance.now() - t;
-  }, SETTLE);
+  }, `(${settle})`);
   expect(day).toBeLessThan(300);
   const done = await page.evaluate(async (settle) => {
     document.getElementById("done")!.click();
     const t = performance.now(); await (0, eval)(settle)({ kind: "click", node: 1 });
     return { ms: performance.now() - t, open: !!document.getElementById("d") && parseFloat(getComputedStyle(document.getElementById("d")!).opacity) >= 0.05 };
-  }, SETTLE);
+  }, `(${settle})`);
   expect(done.ms).toBeGreaterThan(300);
   expect(done.ms).toBeLessThan(900);
   expect(done.open).toBe(false);
@@ -39,7 +39,7 @@ it("sees a menu's options even when aria-controls points elsewhere", async () =>
   const ms = await page.evaluate(async (settle) => {
     document.getElementById("ticket")!.click();
     const t = performance.now(); await (0, eval)(settle)({ kind: "click", node: 3 }); return performance.now() - t;
-  }, SETTLE);
+  }, `(${settle})`);
   expect(ms).toBeGreaterThan(150);
   expect(ms).toBeLessThan(500);
 });
