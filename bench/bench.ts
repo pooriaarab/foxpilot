@@ -1,12 +1,13 @@
 // GLiNER2 timing in the browser. Bundled and served by bench/run.mjs, which passes
-// ?device=&dtype=&tests= and, for some runs, &threads=&session=.
+// ?device=&dtype=&tests= and, for some runs, &model=&threads=&session=.
+// model=2.5-small loads export/export_gliner25.py output, which run.mjs serves at /models/.
 // Tests: shape (same against new shape), sweep (ms against token count),
 // split (one call cut into encode / run / read back).
 import { env, Tensor } from "@huggingface/transformers";
 import { Gliner2 } from "../src/model/gliner2";
-import type { Labels } from "../src/model/gliner2";
+import type { Dtype, Labels } from "../src/model/gliner2";
+import { Gliner25 } from "../src/model/gliner25";
 
-const MODEL = "onnx-community/gliner2-multi-v1-agent-ONNX";
 const SAME_CALLS = 10;
 const NEW_CALLS = 10;
 const SWEEP_CALLS = 5;
@@ -21,12 +22,19 @@ const SESSIONS: Record<string, Record<string, unknown>> = {
 
 const params = new URLSearchParams(location.search);
 const device = (params.get("device") ?? "webgpu") as "webgpu" | "wasm";
-const dtype = (params.get("dtype") ?? "fp16") as "fp16" | "fp32";
+const dtype = (params.get("dtype") ?? "fp16") as Dtype;
+const small = params.get("model") === "2.5-small";
+const MODEL = small ? "gliner2.5-small-v1" : "onnx-community/gliner2-multi-v1-agent-ONNX";
 const session = params.get("session") ?? "default";
 const tests = (params.get("tests") ?? "shape").split(",");
 const threads = params.get("threads");
 
 env.useWasmCache = false;
+if (small) {
+  env.allowLocalModels = true;
+  // Relative on purpose: Transformers.js 4.3 skips its local file check for an http(s) localModelPath.
+  env.localModelPath = "/models/";
+}
 const wasm = env.backends.onnx.wasm as { wasmPaths: unknown; numThreads?: number };
 wasm.wasmPaths = {
   mjs: `${location.origin}/ort/ort-wasm-simd-threaded.asyncify.mjs`,
@@ -75,7 +83,7 @@ async function main() {
     hardwareConcurrency: navigator.hardwareConcurrency,
   };
   const t = performance.now();
-  const model = await Gliner2.load(MODEL, { device, dtype, session_options: SESSIONS[session] });
+  const model = await (small ? Gliner25 : Gliner2).load(MODEL, { device, dtype, session_options: SESSIONS[session] });
   result.loadMs = performance.now() - t;
   result.numThreads = wasm.numThreads;
   const encode = (text: string, labels: Labels) => model.encode(text, { name: "referenced", marker: "[L]", labels });
@@ -173,5 +181,5 @@ async function main() {
 
 main().then(
   (result) => ((window as unknown as { __result: unknown }).__result = result),
-  (error) => ((window as unknown as { __result: unknown }).__result = { device, dtype, session, error: String(error?.stack ?? error) }),
+  (error) => ((window as unknown as { __result: unknown }).__result = { device, dtype, session, error: `${error}\n${error?.stack ?? ""}` }),
 );

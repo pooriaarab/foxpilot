@@ -8,7 +8,7 @@ import type { PreTrainedModel, PreTrainedTokenizer } from "@huggingface/transfor
 export type Labels = Record<string, string | undefined>;
 export type Entity = { text: string; confidence: number; start: number; end: number };
 export type Device = "webgpu" | "wasm" | "cpu";
-export type Dtype = "fp32" | "fp16";
+export type Dtype = "fp32" | "fp16" | "q8";
 
 /** Same pattern as gliner2's WhitespaceTokenSplitter. */
 const WORD =
@@ -29,17 +29,18 @@ export type Encoded = {
 
 export type EncodeTask = { name: string; marker: "[E]" | "[L]"; labels: Labels };
 
-type Output = "cls_logits" | "count_logits" | "span_logits";
 type Read = { data: number[]; dims: number[] };
 
 export class Gliner2 {
-  private constructor(
+  constructor(
     private readonly model: PreTrainedModel,
     private readonly tokenizer: PreTrainedTokenizer,
     private readonly ids: Record<Special, number>,
   ) {}
 
-  static async load(
+  /** Loads into the calling class, so Gliner25.load gives a Gliner25. */
+  static async load<T extends Gliner2>(
+    this: new (model: PreTrainedModel, tokenizer: PreTrainedTokenizer, ids: Record<Special, number>) => T,
     modelId: string,
     options: {
       device?: Device;
@@ -48,7 +49,7 @@ export class Gliner2 {
       /** ONNX Runtime session options; bench/bench.ts uses them. */
       session_options?: Record<string, unknown>;
     } = {},
-  ): Promise<Gliner2> {
+  ): Promise<T> {
     const device = options.device ?? "webgpu";
     const tokenizer = await AutoTokenizer.from_pretrained(modelId);
     const model = await AutoModel.from_pretrained(modelId, {
@@ -71,7 +72,7 @@ export class Gliner2 {
         return [token, encoded[0]!];
       }),
     ) as Record<Special, number>;
-    return new Gliner2(model, tokenizer, ids);
+    return new this(model, tokenizer, ids);
   }
 
   private pieces(text: string): number[] {
@@ -127,7 +128,7 @@ export class Gliner2 {
   }
 
   /** Runs the graph and reads back only `names`. Every output on the GPU is released. */
-  private async run<K extends Output>(encoded: Encoded, names: K[]): Promise<Record<K, Read>> {
+  protected async run<K extends string>(encoded: Encoded, names: K[]): Promise<Record<K, Read>> {
     const n = encoded.inputIds.length;
     const long = (values: number[]) => new Tensor("int64", BigInt64Array.from(values, BigInt), [1, values.length]);
     const outputs = (await this.model({
@@ -135,9 +136,9 @@ export class Gliner2 {
       attention_mask: long(new Array<number>(n).fill(1)),
       word_positions: long(encoded.wordPositions),
       schema_positions: long(encoded.schemaPositions),
-    })) as Record<Output, Tensor>;
+    })) as Record<string, Tensor>;
     try {
-      const read = await readBack(names.map((name) => outputs[name]));
+      const read = await readBack(names.map((name) => outputs[name]!));
       return Object.fromEntries(
         names.map((name, i) => [name, { data: Array.from(read[i]!.to("float32").data as Float32Array), dims: read[i]!.dims }]),
       ) as Record<K, Read>;

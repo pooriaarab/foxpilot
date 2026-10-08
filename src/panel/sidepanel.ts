@@ -9,9 +9,20 @@ import { Reporter } from "../agent/report";
 import { verify, type Check, type Verdict } from "../agent/verify";
 import { onSite, siteIn, withoutSite } from "../agent/site";
 import { Gliner2 } from "../model/gliner2";
+import { Gliner25 } from "../model/gliner25";
 import { TabGroupStatus } from "./tabgroup";
 
-export const GLINER_MODEL = "onnx-community/gliner2-multi-v1-agent-ONNX";
+/** Set by scripts/build.mjs from GLINER=. Stays multi-v1 until the bench picks a winner (#88). */
+declare const __GLINER__: "multi-v1" | "2.5-small";
+const SMALL = __GLINER__ === "2.5-small";
+const Gliner: typeof Gliner2 = SMALL ? Gliner25 : Gliner2;
+// gliner2.5-small has no Hub repo yet, so scripts/build.mjs copies it into models/. It runs
+// as q8 on wasm: in the #88 bench that beat WebGPU below about 160 tokens per call.
+export const GLINER_MODEL = SMALL ? "gliner2.5-small-v1" : "onnx-community/gliner2-multi-v1-agent-ONNX";
+if (SMALL) {
+  env.allowLocalModels = true;
+  env.localModelPath = chrome.runtime.getURL("models/");
+}
 
 // MV3 forbids remote code and blob: imports, so ONNX Runtime loads from ort/.
 env.useWasmCache = false;
@@ -109,12 +120,12 @@ function refreshRun() {
 }
 
 async function loadGliner(): Promise<number> {
-  setModel("gliner", "loading", "Downloading 614 MB once, then cached…", 0);
+  setModel("gliner", "loading", SMALL ? "Loading gliner2.5-small from the extension…" : "Downloading 614 MB once, then cached…", 0);
   try {
     const started = performance.now();
-    gliner = await Gliner2.load(GLINER_MODEL, {
-      device: "webgpu",
-      dtype: "fp16",
+    gliner = await Gliner.load(GLINER_MODEL, {
+      device: SMALL ? "wasm" : "webgpu",
+      dtype: SMALL ? "q8" : "fp16",
       progress_callback: (info) => {
         const i = info as { status?: string; progress?: number };
         if (i.status === "progress_total" && typeof i.progress === "number") {
@@ -125,7 +136,7 @@ async function loadGliner(): Promise<number> {
     // Compile the WebGPU shaders now rather than on the first step.
     await gliner.classify("warm up", "warmup", { a: undefined, b: undefined });
     const ms = Math.round(performance.now() - started);
-    setModel("gliner", "ok", `Ready on WebGPU · loaded in ${(ms / 1000).toFixed(1)} s`);
+    setModel("gliner", "ok", `Ready on ${SMALL ? "wasm" : "WebGPU"} · loaded in ${(ms / 1000).toFixed(1)} s`);
     return ms;
   } catch (error) {
     setModel("gliner", "bad", `Failed to load: ${error instanceof Error ? error.message : error}`);
