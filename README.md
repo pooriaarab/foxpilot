@@ -63,6 +63,7 @@ A temporary add-on is removed when you close Firefox. Load it again for the next
 
 - `main` is staging.
 - `release` is production. To release, merge `main` into `release`. The release workflow signs the `.xpi` with AMO (addons.mozilla.org).
+- A release needs a version bump in `public/manifest.json`. The workflow fails when tag `v<version>` already exists.
 
 ## Credits
 
