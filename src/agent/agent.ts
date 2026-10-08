@@ -1,5 +1,6 @@
 // Port of gliner2-ultrafast agent.py (MIT): the agent loop. Observe, choose,
 // act, record; typed choices, observable state, bounded execution.
+import { parseAsk } from "./ask";
 import { TabBrowser, StalePage } from "./browser";
 import { choose, requirements, sends, type Decision, type Memory, type Part, type Scorer } from "./controller";
 import { firstDate, normalise } from "./dates";
@@ -124,7 +125,7 @@ export class Agent {
   /** Reads the goal's requirements once (before the clock starts) and observes the tab. */
   static async create(
     model: Scorer, browser: TabBrowser, goal: string,
-    makeWriter: (parts: Part[], found: SpansFound) => FieldWriter, onUpdate: (view: AgentView) => void,
+    makeWriter: (parts: Part[], found: SpansFound, model: Scorer) => FieldWriter, onUpdate: (view: AgentView) => void,
   ): Promise<Agent> {
     const task = goal.trim();
     if (!task) throw new Error("Type a goal first");
@@ -137,9 +138,13 @@ export class Agent {
       },
       classify: (text, name, labels) => model.classify(text, name, labels),
     };
-    // Qualifiers ("cheapest", "morning") choose among results; they are not field values.
-    const parts = await requirements(stripQualifiers(task) || task, recording);
-    const agent = new Agent(model, browser, task, parts, makeWriter(parts, found), onUpdate, found);
+    // Qualifiers ("cheapest", "morning") choose among results; they are not field
+    // values. In an ask that dictates values, "time: Morning" is one.
+    const { values } = parseAsk(task);
+    const parts = await requirements(values.length ? task : stripQualifiers(task) || task, recording);
+    // A dictated value is typed as written, not as GLiNER2 cased its span.
+    for (const value of values) found.set(value.value.toLowerCase(), value.value);
+    const agent = new Agent(model, browser, task, parts, makeWriter(parts, found, model), onUpdate, found);
     // A page that just loaded may not have drawn its controls yet (a site
     // opened for the goal); give it up to 3 s before judging it.
     agent.page = await browser.observe();
