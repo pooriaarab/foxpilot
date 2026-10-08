@@ -1,5 +1,6 @@
 .venv/
 dist-model/
+dist-model-25/
 node_modules/
 dist/
 bench/results/

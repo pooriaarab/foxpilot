@@ -5,6 +5,7 @@
 //   E2     multi-threaded wasm on a cross-origin isolated page
 //   E3     ONNX Runtime WebGPU session options: outputs on the GPU, graph capture
 //   E4     the same page in Playwright Chromium, as a control
+//   #88    gliner2.5-small (webgpu fp16, wasm q8) from dist-model-25 (export/export_gliner25.py)
 // Usage: pnpm bench:firefox [--browser chromium]   Env: FIREFOX (binary path).
 import * as esbuild from "esbuild";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
@@ -27,7 +28,11 @@ const RUNS = [
   { name: "wasm fp32", q: "device=wasm&dtype=fp32&tests=shape,sweep" },
   { name: "wasm fp32 isolated 4 threads", q: "device=wasm&dtype=fp32&threads=4&coi=1&tests=sweep" },
   { name: "wasm fp32 isolated max threads", q: "device=wasm&dtype=fp32&threads=max&coi=1&tests=sweep" },
+  { name: "gliner2.5-small webgpu fp16", q: "model=2.5-small&device=webgpu&dtype=fp16&tests=shape,sweep,split" },
+  { name: "gliner2.5-small wasm q8", q: "model=2.5-small&device=wasm&dtype=q8&tests=shape,sweep" },
 ];
+const SMALL = join(root, "dist-model-25");
+if (!existsSync(SMALL)) console.warn(`No ${SMALL}: the gliner2.5-small runs fail. Run export/export_gliner25.py first.`);
 if (BROWSER !== "firefox" && BROWSER !== "chromium") {
   console.error(`--browser must be firefox or chromium, not ${BROWSER}.`);
   process.exit(2);
@@ -65,8 +70,11 @@ for (const f of readdirSync(ortDist)) {
 const ISOLATE = { "cross-origin-opener-policy": "same-origin", "cross-origin-embedder-policy": "require-corp" };
 const server = createServer((req, res) => {
   const url = new URL(req.url, "http://x");
+  // Model files for the gliner2.5-small runs, read on demand.
+  const model = url.pathname.match(/^\/models\/gliner2\.5-small-v1\/([\w./-]+)$/)?.[1];
+  if (model && !model.includes("..") && existsSync(join(SMALL, model))) return void res.writeHead(200).end(readFileSync(join(SMALL, model)));
   const hit = files[url.pathname];
-  if (!hit) return void res.writeHead(404).end();
+  if (!hit) return void (console.warn(`  404 ${url.pathname}`), res.writeHead(404).end());
   const isolate = url.pathname !== "/" || url.searchParams.has("coi");
   res.writeHead(200, { "content-type": hit[0], ...(isolate ? ISOLATE : {}) }).end(hit[1]);
 });
@@ -192,7 +200,7 @@ const meaning = [
 const md = [
   `# Where GLiNER2's per-call time goes: ${version}`,
   ``,
-  `Model onnx-community/gliner2-multi-v1-agent-ONNX. Times are ms per call. hardwareConcurrency ${results.find((r) => r.hardwareConcurrency)?.hardwareConcurrency ?? "-"}.`,
+  `Model onnx-community/gliner2-multi-v1-agent-ONNX; gliner2.5-small rows use dist-model-25 (#88). Times are ms per call. hardwareConcurrency ${results.find((r) => r.hardwareConcurrency)?.hardwareConcurrency ?? "-"}.`,
   ``,
   `## What this means`,
   ``,
