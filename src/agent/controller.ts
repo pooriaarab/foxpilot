@@ -410,9 +410,12 @@ function best(ordered: Map<string, Group>, scores: Scores, parts: Part[]): Chose
       if (group.takesValue && valued.has(text) && !datedTexts.has(text) && isDateField(execute(group))) return;
       // Zipline addition: a dropdown can only be set to one of its options, so an
       // option serves a value only if it names it ("Sort by: → Price: High to Low"
-      // scored 0.29 for "kitchenaid hand mixer" on Amazon).
-      if (execute(group).kind === "select" && valued.has(text) &&
-          !(valuesOf.get(text) ?? []).every((value) => namesValue(execute(group).label, value))) return;
+      // scored 0.29 for "kitchenaid hand mixer" on Amazon). A suggestion is held to
+      // the same rule, with typos forgiven as when it is taken: "Your location"
+      // does not serve "from Berlin Hauptbahnhof".
+      const names = execute(group).kind === "select" ? namesValue : execute(group).suggestion_for != null ? nearlyNames : null;
+      if (names && valued.has(text) &&
+          !(valuesOf.get(text) ?? []).every((value) => names(execute(group).label, value))) return;
       if (score >= (valued.has(text) && group.takesValue ? VALUE_FLOOR : FLOOR)) column.set(index, score);
     });
     if (column.size) offers.push([group, column]);
@@ -566,9 +569,10 @@ function enter(state: Page): Chosen | null {
 }
 
 /** Rank observed autocomplete suggestions for the most recently entered value. */
-async function suggestion(model: Scorer, ordered: Map<string, Group>, history: HistoryEntry[]): Promise<Chosen | null> {
+async function suggestion(model: Scorer, ordered: Map<string, Group>, history: HistoryEntry[], parts: Part[]): Promise<Chosen | null> {
   const last = history[history.length - 1];
   if (!last || last.kind !== "fill" || !last.text) return null;
+  const valued = parts.some((p) => p.text === last.requirement && p.values.length);
   let options = new Map<string, Group>();
   for (const group of ordered.values()) {
     const action = execute(group);
@@ -595,10 +599,12 @@ async function suggestion(model: Scorer, ordered: Map<string, Group>, history: H
   }
   // Zipline addition: in a search box the typed query is the point; a
   // suggestion that does not contain it ("crunchbase" for a mixer) is not
-  // taken, and the query is sent as typed.
+  // taken, and the query is sent as typed. A value from the goal is the point
+  // too: Google Maps lists "Your location" before the places that match
+  // "Berlin Hauptbahnhof", and taking it would set the wrong start.
   else {
     const field = ordered.get(JSON.stringify([last.node ?? null, null]));
-    if (isSearchField({ label: last.action, role: field ? execute(field).role : undefined })) return null;
+    if (valued || isSearchField({ label: last.action, role: field ? execute(field).role : undefined })) return null;
   }
   const [picked, confidence] = top(await model.classify(typed, "suggestion", asLabels(options.keys())));
   return { requirement: null, score: confidence, group: options.get(picked)!, commits: true };
@@ -656,7 +662,7 @@ export async function choose(
   let chosen = best(ordered, scores, parts);
   const sending = await unsentForm(model, state, ordered, history, chosen);
   if (sending) chosen = [sending, ...chosen];
-  const committing = picked.length ? null : await suggestion(model, ordered, history);
+  const committing = picked.length ? null : await suggestion(model, ordered, history, parts);
   chosen = committing ? [committing] : ((await dialog(model, ordered, chosen, history)) ?? chosen);
   const commits = Boolean(committing);
   if (!chosen.length) {
