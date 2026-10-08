@@ -5,7 +5,8 @@
 //   gliner2-ultrafast's text helper but without leaving the browser.
 // Either may refuse; the agent then stops offering that field.
 import { pipeline, type TextGenerationPipeline } from "@huggingface/transformers";
-import type { Part } from "./controller";
+import { reshape } from "./ask";
+import type { Labels, Part, Scorer } from "./controller";
 import { isSearchField, searchQuery } from "./search";
 
 export { isSearchField, searchQuery };
@@ -31,6 +32,13 @@ export interface FieldWriter {
   write(context: FieldContext): Promise<string>;
 }
 
+/** The label GLiNER2 picks for a field that takes none of the ask's values. */
+const NO_KEY = "nothing the goal dictates";
+/** Keys that only say what a value looks like; any field may take them unless another key claims it. */
+const PLAIN_KEYS = new Set(["text", "code"]);
+/** A field maps to a key only when GLiNER2 is this sure ("Fax" scored 0.51 for "service"). */
+export const KEY_FLOOR = 0.8;
+
 /** Types the extracted span for the requirement; dates go in as ISO. */
 export class SpanWriter implements FieldWriter {
   readonly name = "GLiNER spans";
@@ -39,9 +47,21 @@ export class SpanWriter implements FieldWriter {
     private readonly parts: Part[],
     /** Lowercased value → its surface form in the goal. */
     private readonly surfaces: Map<string, string>,
+    /** Maps a field to the key of a dictated value. */
+    private readonly model?: Scorer,
   ) {}
 
   async write(context: FieldContext): Promise<string> {
+    const part = this.parts.find((p) => p.text === context.requirement);
+    // A value the ask dictates goes in as written, in the field's shape, and
+    // only into a field for its key: "service: Cleaning" never goes into a
+    // "Fax" field that is the only one left on the page.
+    if (part?.key && !part.date) {
+      const [key, score] = await this.keyOf(context.field.label);
+      const plain = PLAIN_KEYS.has(part.key) && (key === NO_KEY || score < KEY_FLOOR);
+      if (this.model && !plain && (key !== part.key || score < KEY_FLOOR)) throw new Refused(`"${context.field.label}" is not a field for the ${part.key}`);
+      return reshape(this.literal(part), context.field.label);
+    }
     // Into a search box, the goal is the query itself ("Weather in Seattle"),
     // not the value one part of it names ("Seattle"): always for short goals,
     // and for any goal when the search box is the page's only text field (a
@@ -49,13 +69,40 @@ export class SpanWriter implements FieldWriter {
     if (isSearchField(context.field) && (this.parts.length <= 2 || context.textFields === 1)) {
       return searchQuery(context.goal);
     }
-    const part = this.parts.find((p) => p.text === context.requirement);
     if (!part) throw new Refused("No requirement chose this field");
     if (part.date) return part.date;
-    if (!part.values.length) throw new Refused(`"${part.text}" names no value to type`);
+    if (!part.values.length) return this.dictated(context, part);
+    return this.literal(part);
+  }
+
+  /** The part's first value, in its surface form. */
+  private literal(part: Part): string {
     const lowered = part.text.toLowerCase();
     const first = [...part.values].sort((a, b) => lowered.indexOf(a) - lowered.indexOf(b))[0]!;
     return this.surfaces.get(first) ?? first;
+  }
+
+  /** GLiNER2's pick among the dictated keys for a field label ("Your name" → name). */
+  private async keyOf(label: string): Promise<[string, number]> {
+    if (!this.model) return [NO_KEY, 1];
+    const labels: Labels = { [NO_KEY]: undefined };
+    for (const p of this.parts) if (p.key && !p.date) labels[p.key] = undefined;
+    const scores = await this.model.classify(label, "field", labels);
+    return Object.entries(scores).sort((a, b) => b[1] - a[1])[0]!;
+  }
+
+  /**
+   * Zipline addition: a part with no value of its own ("into the name field")
+   * chose the field. It takes the dictated value not typed yet whose key the
+   * field maps to; a field that maps to none stays empty.
+   */
+  private async dictated(context: FieldContext, part: Part): Promise<string> {
+    const typed = new Set(context.recent_actions.map((a) => a.text));
+    const open = this.parts.filter((p) => p.key && !p.date && !typed.has(this.literal(p)));
+    const [key, score] = open.length ? await this.keyOf(context.field.label) : [NO_KEY, 1];
+    const match = open.find((p) => p.key === key);
+    if (!match || score < KEY_FLOOR) throw new Refused(`"${part.text}" names no value to type`);
+    return reshape(this.literal(match), context.field.label);
   }
 }
 
