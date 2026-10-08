@@ -4,6 +4,4 @@ node_modules/
 dist/
 bench/bench.js
 ref-ultrafast/
-.e2e-profile/
-e2e-page.png
-videos/
+artifacts/
