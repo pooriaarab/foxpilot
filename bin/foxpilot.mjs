@@ -7,12 +7,21 @@
 // Exit code 0 only when every goal is verified on its page.
 //   foxpilot mcp [--headless]
 // Serves run_task, open_url, snapshot, and close as an MCP server on stdio.
+//   foxpilot eval --zoo <zoo-sites checkout> [...]
+// Runs the zoo-sites eval (scripts/zoo/cli.mjs) and writes docs/benchmarks/.
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { format, launch, preflight } from "../scripts/lib/firefox.mjs";
 
+if (process.argv[2] === "eval") {
+  process.argv.splice(2, 1);
+  await import("../scripts/zoo/cli.mjs");
+  process.exit(0);
+}
+
 const USAGE = `Usage: foxpilot run (--url <url> --goal <goal> | --file <tasks.jsonl>) [--llm] [--json] [--headless]
-       foxpilot mcp [--headless]`;
+       foxpilot mcp [--headless]
+       foxpilot eval --zoo <zoo-sites checkout> [--tasks a,b] [--repeat N] [--limit N] [--extractor]`;
 let parsed;
 try {
   parsed = parseArgs({

@@ -16,7 +16,8 @@
     "lint:ext": "web-ext lint -s dist",
     "ci:local": "pnpm typecheck && pnpm test && pnpm build && pnpm lint:ext",
     "e2e": "pnpm build && node scripts/e2e.mjs",
-    "bench:firefox": "node bench/run.mjs"
+    "bench:firefox": "node bench/run.mjs",
+    "eval": "pnpm build && node scripts/zoo/cli.mjs"
   },
   "license": "MIT",
   "dependencies": {
