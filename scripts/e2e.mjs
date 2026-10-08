@@ -44,10 +44,20 @@ for (const [what, path] of [["Firefox", FIREFOX], ["the built extension (run pnp
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // BiDi does not report navigation events for moz-extension: pages, so goto()
-// never resolves there. Start it, then wait until the page itself reports the URL.
+// never resolves there and waitForFunction() dies when the page reloads.
+// Poll with plain evaluate() calls instead, retrying across reloads.
+async function poll(page, fn, arg, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const ok = await page.evaluate(fn, arg).catch(() => false);
+    if (ok) return;
+    if (Date.now() > deadline) throw new Error(`Timed out after ${timeoutMs} ms waiting for ${fn.toString().slice(0, 80)}`);
+    await sleep(250);
+  }
+}
 async function openExtensionPage(page, target) {
   page.goto(target, { timeout: 0 }).catch(() => {});
-  await page.waitForFunction((u) => location.href === u && document.readyState === "complete", { timeout: 30_000, polling: 250 }, target);
+  await poll(page, (u) => location.href === u && document.readyState === "complete", target, 30_000);
 }
 const git = (...a) => { try { return execFileSync("git", a, { cwd: root, encoding: "utf8" }).trim(); } catch { return "unknown"; } };
 const stamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -88,7 +98,7 @@ try {
   if (!tabId) throw new Error("Cannot find the task tab from the panel.");
   await openExtensionPage(panel, `${panelUrl}?tab=${tabId}`);
 
-  await panel.waitForFunction(() => /Ready|Failed/.test(document.getElementById("gliner-status")?.textContent ?? ""), { timeout: 600_000 });
+  await poll(panel, () => /Ready|Failed/.test(document.getElementById("gliner-status")?.textContent ?? ""), undefined, 600_000);
   const glinerStatus = await panel.$eval("#gliner-status", (e) => e.textContent ?? "");
   console.log("gliner:", glinerStatus);
   record.modelLoadMs = Math.round(Number(/loaded in ([\d.]+) s/.exec(glinerStatus)?.[1] ?? NaN) * 1000) || null;
@@ -97,7 +107,7 @@ try {
   const llmOn = await panel.$eval("#llm-toggle", (e) => e.checked);
   if (llmOn !== useLlm) await panel.$eval("#llm-toggle", (e) => e.click());
   if (useLlm) {
-    await panel.waitForFunction(() => /On:|Failed/.test(document.getElementById("llm-status")?.textContent ?? ""), { timeout: 600_000 });
+    await poll(panel, () => /On:|Failed/.test(document.getElementById("llm-status")?.textContent ?? ""), undefined, 600_000);
     console.log("llm:", await panel.$eval("#llm-status", (e) => e.textContent));
   }
 
@@ -113,7 +123,7 @@ try {
   const runAt = Date.now();
   await panel.evaluate(() => { window.__e2eRun = performance.now(); });
   await panel.$eval("#run", (e) => e.click());
-  await panel.waitForFunction(() => !document.getElementById("result")?.hidden, { timeout: 180_000 });
+  await poll(panel, () => !document.getElementById("result")?.hidden, undefined, 180_000);
   // The verdict box lands after the answer search.
   await panel.waitForSelector(".verdict", { timeout: 60_000 }).catch(() => {});
   record.totalMs = Date.now() - runAt;
