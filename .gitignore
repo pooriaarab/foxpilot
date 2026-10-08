@@ -5,3 +5,4 @@ dist/
 bench/results/
 ref-ultrafast/
 artifacts/
+docs/benchmarks/*.json
