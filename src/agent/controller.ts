@@ -8,6 +8,7 @@ import type { Action, HistoryEntry, Page } from "./types";
 import { isSearchField } from "./search";
 import { parseAsk, properName } from "./ask";
 import { patience } from "./patience";
+import { acceptsAll, declining, refusing, stanceOf, type Control } from "./dialogs";
 
 export type Labels = Record<string, string | undefined>;
 
@@ -595,13 +596,26 @@ function top(probabilities: Record<string, number>): [string, number] {
 const asLabels = (names: Iterable<string>): Labels => Object.fromEntries([...names].map((n) => [n, undefined]));
 
 /** Select a pending dialog action or score its available confirmation controls. */
-async function dialog(model: Scorer, ordered: Map<string, Group>, chosen: Chosen[], history: HistoryEntry[]): Promise<Chosen[] | null> {
+async function dialog(model: Scorer, ordered: Map<string, Group>, chosen: Chosen[], history: HistoryEntry[], goal: Part[]): Promise<Chosen[] | null> {
   const inside = new Map<string, Group>();
   for (const group of ordered.values()) {
     if (execute(group).dialog) inside.set(clean(execute(group).label), group);
   }
   if (!inside.size) return null;
-  const wanted = chosen.filter((c) => execute(c.group).dialog);
+  // A goal that says to refuse or decline outranks a score: no accept-all, ever.
+  const stance = stanceOf(goal.map((p) => p.text).join(" "));
+  const controls: Control[] = [...inside].map(([label, group]) => ({
+    label, action: execute(group),
+    pick: group.open && !firstDate(label) && !OPTION_ROLES.has(execute(group).role ?? "") && !isUnsafe(execute(group)),
+  }));
+  const turn = (found: { label: string; score: number } | null) =>
+    found ? [{ requirement: null, score: found.score, group: inside.get(found.label)! }] : null;
+  if (stance === "refuse") return turn(await refusing(model, controls, history)) ?? [];
+  if (stance === "decline") {
+    const declined = turn(await declining(model, stance, controls));
+    if (declined) return declined;
+  }
+  const wanted = chosen.filter((c) => execute(c.group).dialog && !(stance !== "none" && acceptsAll(clean(execute(c.group).label))));
   if (wanted.length) return wanted;
   // Zipline addition: confirming a dialog means a button, not one of a menu's
   // options (it picked 'Round trip' in an open ticket-type menu).
@@ -612,6 +626,8 @@ async function dialog(model: Scorer, ordered: Map<string, Group>, chosen: Chosen
   // Zipline addition: a popup that appeared while typing is an autocomplete,
   // not a dialog to confirm ("Ask Alexa about this" in Amazon's search box).
   if (history[history.length - 1]?.kind === "fill") return null;
+  const unasked = turn(await declining(model, stance, controls));
+  if (unasked) return unasked;
   const [value, confidence] = top(await model.classify(CONFIRM, "confirm", asLabels(openable.keys())));
   if (confidence < CONFIRM_FLOOR) return null;
   return [{ requirement: null, score: confidence, group: openable.get(value)! }];
@@ -781,7 +797,7 @@ export async function choose(
   const sending = await unsentForm(model, state, ordered, history, chosen);
   if (sending) chosen = [sending, ...chosen];
   const committing = picked.length ? null : await suggestion(model, ordered, history, parts);
-  chosen = committing ? [committing] : ((await dialog(model, ordered, chosen, history)) ?? chosen);
+  chosen = committing ? [committing] : ((await dialog(model, ordered, chosen, history, allParts)) ?? chosen);
   const commits = Boolean(committing);
   if (!chosen.length) {
     const searching = searchFallback(ordered, history, parts);
