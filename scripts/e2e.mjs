@@ -53,6 +53,7 @@ try {
   const result = await session.run(goal, { tabId, llm: useLlm });
   // The task's url stays the record's url; where the run ended is finalUrl.
   Object.assign(record, result, { url, finalUrl: result.url });
+  record.states = await session.states().catch((e) => `unread: ${e.message}`);
   for (const line of format(result)) console.log(line);
 } catch (error) {
   failure = error instanceof Error ? error.message : String(error);
