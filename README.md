@@ -46,6 +46,7 @@ A temporary add-on is removed when you close Firefox. Load it again for the next
 
 - `pnpm ci:local`: runs the same checks as CI.
 - `pnpm e2e [flights|maps|walking] [--llm]`: runs a task end to end in Firefox. It writes a JSON result and a screenshot to `artifacts/`.
+- `node bin/foxpilot.mjs run --url <url> --goal <goal> [--llm] [--json]`: runs one goal in Firefox and prints the result. `--file tasks.jsonl` runs one `{"url", "goal"}` per line in one session, so the model loads once. Scripts can use the same session from `scripts/lib/firefox.mjs`, or call `window.foxpilot.run({ goal, tabId, llm })` in the panel.
 - `tests/parity.test.ts`: the JavaScript GLiNER2 runtime reproduces the token ids and outputs of the Python library on 14 recorded calls (fp32 and fp16).
 - `tests/verify.test.ts`: the goal check passes a sent, complete form. It fails a Round-trip form beside "One way trip from New York..." cards, a form that was never sent and a captcha page.
 - `tests/controller.test.ts`: the TypeScript controller makes the same decisions as the Python controller on captured Google Flights and Maps pages. `tests/oracle.py` produces the reference.

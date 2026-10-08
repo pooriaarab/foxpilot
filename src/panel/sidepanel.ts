@@ -1,11 +1,11 @@
 // Side panel: loads the models, runs the agent on the current tab, and shows
-// every decision as it happens.
+// every decision as it happens. window.foxpilot exposes the same run to scripts.
 import { env } from "@huggingface/transformers";
-import { Agent, type AgentView, type Step } from "../agent/agent";
-import { nameInjected, TabBrowser } from "../agent/browser";
-import { clear, findAnswer, lastNote, lastRows, lastScores } from "../agent/answer";
+import { Agent, type AgentView, type Refusal, type Status, type Step, type Timing } from "../agent/agent";
+import { nameInjected, TabBrowser, type Calls } from "../agent/browser";
+import { clear, findAnswer, lastNote, lastRows, lastScores, type Answer } from "../agent/answer";
 import { LlmWriter, SpanWriter, type FieldWriter } from "../agent/fieldtext";
-import { verify, type Verdict } from "../agent/verify";
+import { verify, type Check, type Verdict } from "../agent/verify";
 import { onSite, siteIn, withoutSite } from "../agent/site";
 import { Gliner2 } from "../model/gliner2";
 import { TabGroupStatus } from "./tabgroup";
@@ -109,7 +109,7 @@ function refreshRun() {
   runButton.disabled = !running && (!gliner || (llmToggle.checked && !llmReady) || !goalBox.value.trim());
 }
 
-async function loadGliner() {
+async function loadGliner(): Promise<number> {
   setModel("gliner", "loading", "Downloading 614 MB once, then cached…", 0);
   try {
     const started = performance.now();
@@ -125,11 +125,15 @@ async function loadGliner() {
     });
     // Compile the WebGPU shaders now rather than on the first step.
     await gliner.classify("warm up", "warmup", { a: undefined, b: undefined });
-    setModel("gliner", "ok", `Ready on WebGPU · loaded in ${((performance.now() - started) / 1000).toFixed(1)} s`);
+    const ms = Math.round(performance.now() - started);
+    setModel("gliner", "ok", `Ready on WebGPU · loaded in ${(ms / 1000).toFixed(1)} s`);
+    return ms;
   } catch (error) {
     setModel("gliner", "bad", `Failed to load: ${error instanceof Error ? error.message : error}`);
+    throw error;
+  } finally {
+    refreshRun();
   }
-  refreshRun();
 }
 
 async function setLlm(on: boolean) {
@@ -181,8 +185,6 @@ function stepItem(step: Step): HTMLLIElement {
 }
 
 function render(view: AgentView) {
-  // For tests and debugging from the panel's console.
-  (window as unknown as { __zipline: AgentView }).__zipline = view;
   const list = $<HTMLOListElement>("steps");
   // Rows are created once (so each animates in once) and then only refreshed.
   list.querySelector(".thinking")?.remove();
@@ -260,20 +262,85 @@ function showNote(text: string) {
   $("result").after(box);
 }
 
-async function run() {
-  if (running) {
-    running.stop();
-    return;
+/** One action of a finished run: what it did, ms since the action before it, and where that time went. */
+export type RunStep = { step: number; operation: string; action: string; text: string | null; ms: number; timing?: Timing };
+
+export type RunOptions = { goal: string; tabId: number; llm?: boolean };
+
+/** What `window.foxpilot.run` resolves to. A failed run is a result with status "error", never a rejection. */
+export type RunResult = {
+  /** Runs in this panel count from 1, so a caller can find its own result with `last()`. 0 when refused as busy. */
+  id: number;
+  goal: string;
+  /** The tab's address when the run ended. */
+  url: string;
+  status: Status;
+  message?: string;
+  verified: boolean;
+  answer: Answer | null;
+  checks: Check[];
+  steps: RunStep[];
+  decisions: { operation: string; target: string | null; ms?: number; calls?: number }[];
+  refusals: Refusal[];
+  textCalls: AgentView["textCalls"];
+  /** Run to answer, in ms. */
+  totalMs: number;
+  /** The model load this run waited for; 0 when an earlier run in this panel paid for it. */
+  modelLoadMs: number;
+  evaluateCalls: Record<string, Calls>;
+};
+
+declare global {
+  interface Window {
+    /** The run API for scripts (scripts/lib/firefox.mjs). The Run button uses it too. */
+    foxpilot: { run(options: RunOptions): Promise<RunResult>; ready(): Promise<{ modelLoadMs: number }>; last(): RunResult | null };
   }
-  const goal = goalBox.value.trim();
-  if (!gliner || !goal) return;
-  const tabId = await targetTab();
-  if (tabId === undefined) return;
+}
+
+let busy = false;
+let runs = 0;
+let lastResult: RunResult | null = null;
+let loadPaid = false;
+/** The last run, for the copy-log button. */
+let logged: {
+  agent: Agent;
+  site: { host: string; opened: boolean } | null;
+  start: { url: string; title: string } | null;
+  verdict: Verdict | null;
+  answer: { answer: Answer | null; scores: typeof lastScores; rows: typeof lastRows } | null;
+} | null = null;
+
+/** The finished run as data: the same verdict, answer and steps the panel shows. */
+function outcome(view: AgentView, verdict: Verdict | null, answer: Answer | null): Partial<RunResult> {
+  return {
+    status: view.status,
+    message: view.message,
+    verified: view.status === "done" && verdict?.verified === true,
+    answer,
+    checks: [...(verdict?.checks ?? []), ...(verdict?.problem ? [{ part: verdict.problem, ok: false, evidence: "" }] : [])],
+    steps: view.history.map((h, i) => ({
+      step: h.step, operation: h.operation, action: h.target ?? h.action, text: h.text ?? null,
+      ms: h.elapsedMs - (view.history[i - 1]?.elapsedMs ?? 0), timing: h.timing,
+    })),
+    decisions: (view.decisions ?? []).map((d) => ({ operation: d.operation, target: d.target, ms: d.ms, calls: d.calls })),
+    refusals: view.refusals,
+    textCalls: view.textCalls,
+  };
+}
+
+async function run({ goal, tabId, llm: useLlm = false }: RunOptions): Promise<RunResult> {
+  const result: RunResult = {
+    id: 0, goal: goal.trim(), url: "", status: "error", verified: false, answer: null, checks: [], steps: [],
+    decisions: [], refusals: [], textCalls: [], totalMs: 0, modelLoadMs: 0, evaluateCalls: {},
+  };
+  if (busy) return { ...result, message: "A run is already in progress" };
+  busy = true;
+  result.id = ++runs;
+  goalBox.value = result.goal;
   $("steps").replaceChildren();
   $("result").hidden = true;
   document.querySelectorAll(".answer, .verdict").forEach((e) => e.remove());
-  // The run log reads these; a run that stops before the answer step must not show the last run's.
-  Object.assign(window, { __ziplineAnswer: null, __ziplineVerdict: null, __ziplineCalls: null });
+  logged = null;
   runButton.textContent = "Stop";
   runButton.classList.add("stop");
   runButton.disabled = false;
@@ -285,13 +352,21 @@ async function run() {
     $("elapsed").textContent = `${((performance.now() - started) / 1000).toFixed(1)} s`;
   }, 100);
   try {
+    if (!result.goal) throw new Error("Type a goal first");
+    result.modelLoadMs = loadPaid ? 0 : await glinerLoad;
+    loadPaid = true;
+    if (useLlm || llmToggle.checked) {
+      llmToggle.checked = useLlm;
+      await setLlm(useLlm);
+      if (useLlm && !llmReady) throw new Error("The local LLM did not load");
+    }
     // A goal that names a site ("… on amazon.com") starts on that site; the
     // rest of the goal is what to do there.
-    const site = siteIn(goal);
-    let task = goal;
+    const site = siteIn(result.goal);
+    let task = result.goal;
     let opened = false;
     browser = await attachOrOpenStart(tabId);
-    Object.assign(window, { __ziplineCalls: browser.calls });
+    result.evaluateCalls = browser.calls;
     if (site) {
       // The page's own location, read by a script injected into the tab.
       const here = await browser.evaluate(pageInfo).then((p) => p.url, () => "");
@@ -300,14 +375,13 @@ async function run() {
         await browser.navigate(site.url);
         opened = true;
       }
-      task = withoutSite(goal, site) || goal;
+      task = withoutSite(result.goal, site) || result.goal;
     }
-    Object.assign(window, { __ziplineSite: site ? { ...site, opened } : null });
     const setup = performance.now();
     await browser.evaluate(clear).catch(() => {});
-    const useLlm = llmToggle.checked && llm && llmReady;
+    const model = gliner!;
     running = await Agent.create(
-      gliner,
+      model,
       browser,
       task,
       (parts, found): FieldWriter => (useLlm ? llm! : new SpanWriter(parts, found)),
@@ -318,19 +392,20 @@ async function run() {
     );
     const loopStart = performance.now();
     const page = await browser.evaluate(pageInfo).catch(() => null);
-    Object.assign(window, { __ziplinePage: page });
+    logged = { agent: running, site: site ? { ...site, opened } : null, start: page, verdict: null, answer: null };
     const view = await running.run();
     const loopEnd = performance.now();
     render(view);
     await status.update(view);
     let verdict: Verdict | null = null;
+    let answer: Answer | null = null;
     if (view.status === "done") {
       $("clock-sub").textContent = "Checking the page against the goal…";
-      verdict = view.verdict ?? await verify(gliner, await browser.observe(), view.parts, view.history).catch((error) => {
+      verdict = view.verdict ?? await verify(model, await browser.observe(), view.parts, view.history).catch((error) => {
         console.error("verify failed", error);
         return null;
       });
-      (window as unknown as { __ziplineVerdict: unknown }).__ziplineVerdict = verdict;
+      logged.verdict = verdict;
     }
     const checked = performance.now();
     if (view.status === "done" && verdict && !verdict.verified) {
@@ -341,17 +416,19 @@ async function run() {
     } else if (view.status === "done") {
       $("clock-sub").textContent = "Looking for the answer on the page…";
       let failure = "";
-      const answer = await findAnswer(browser, gliner, goal).catch((error) => {
+      answer = await findAnswer(browser, model, result.goal).catch((error) => {
         console.error("answer search failed", error);
         failure = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
         return null;
       });
-      (window as unknown as { __ziplineAnswer: unknown }).__ziplineAnswer = { answer, scores: lastScores, rows: lastRows };
+      logged.answer = { answer, scores: lastScores, rows: lastRows };
       render(view);
       if (answer) showAnswer(answer.text, answer.score, answer.label);
       else showNote(failure ? `Answer search failed: ${failure}` : lastNote || "Nothing on the page stood out as the answer.");
       if (verdict) showVerdict(verdict);
     }
+    Object.assign(result, outcome(view, verdict, answer));
+    result.url = await browser.evaluate(pageInfo).then((p) => p.url, () => "");
     // The big clock is wall time from Run, the same clock that ticked while it ran.
     // Below it, where the time went: the loop's own timer leaves out attaching,
     // reading the goal and the answer search.
@@ -365,10 +442,12 @@ async function run() {
     $("elapsed").textContent = secs(performance.now() - started);
     $("clock-sub").textContent = parts.join(" · ");
   } catch (error) {
-    const result = $<HTMLParagraphElement>("result");
-    result.hidden = false;
-    result.className = "result error";
-    result.textContent = `Error: ${error instanceof Error ? error.message : error}`;
+    result.status = "error";
+    result.message = error instanceof Error ? error.message : String(error);
+    const box = $<HTMLParagraphElement>("result");
+    box.hidden = false;
+    box.className = "result error";
+    box.textContent = `Error: ${result.message}`;
     await status.failed();
   } finally {
     status.finish();
@@ -380,7 +459,12 @@ async function run() {
     runButton.textContent = "Run";
     runButton.classList.remove("stop");
     refreshRun();
+    result.totalMs = Math.round(performance.now() - started);
+    result.evaluateCalls = Object.fromEntries(Object.entries(result.evaluateCalls).map(([name, c]) => [name, { count: c.count, ms: Math.round(c.ms) }]));
+    lastResult = result;
+    busy = false;
   }
+  return result;
 }
 
 for (const example of EXAMPLES) {
@@ -396,11 +480,8 @@ for (const example of EXAMPLES) {
 
 /** Plain-text log of the last run: goal, requirements, every decision and step, and the answer step. */
 function runLog(): string {
-  const view = (window as unknown as { __zipline?: AgentView }).__zipline;
-  const answer = (window as unknown as { __ziplineAnswer?: unknown }).__ziplineAnswer;
-  const site = (window as unknown as { __ziplineSite?: { host: string; opened: boolean } | null }).__ziplineSite;
-  const start = (window as unknown as { __ziplinePage?: { url: string; title: string } | null }).__ziplinePage;
-  if (!view) return "No run yet.";
+  if (!logged) return "No run yet.";
+  const { agent: { view }, site, start, verdict, answer } = logged;
   const lines = [
     `foxpilot run · ${new Date().toISOString()}`,
     `Goal: ${view.goal}`,
@@ -422,8 +503,8 @@ function runLog(): string {
     "",
     `Text writer calls: ${JSON.stringify(view.textCalls)}`,
     `Refused decisions: ${JSON.stringify(view.refusals)}`,
-    `Verdict: ${JSON.stringify((window as unknown as { __ziplineVerdict?: unknown }).__ziplineVerdict ?? null)}`,
-    `Answer step: ${JSON.stringify(answer ?? null).slice(0, 1500)}`,
+    `Verdict: ${JSON.stringify(verdict)}`,
+    `Answer step: ${JSON.stringify(answer).slice(0, 1500)}`,
   ];
   return lines.join("\n");
 }
@@ -435,12 +516,22 @@ $("copy-log").addEventListener("click", async () => {
 });
 
 goalBox.addEventListener("input", refreshRun);
-runButton.addEventListener("click", () => void run());
+runButton.addEventListener("click", async () => {
+  if (running) return running.stop();
+  const tabId = await targetTab();
+  if (tabId !== undefined) await run({ goal: goalBox.value, tabId, llm: llmToggle.checked });
+});
 llmToggle.addEventListener("change", () => void setLlm(llmToggle.checked));
+
+/** GLiNER2's load time in ms. The panel shows a failure; `ready()` and `run()` report it. */
+const glinerLoad = loadGliner();
+glinerLoad.catch(() => {});
+
+window.foxpilot = { run, ready: () => glinerLoad.then((modelLoadMs) => ({ modelLoadMs })), last: () => lastResult };
 
 (async () => {
   const { llm: on } = await chrome.storage.local.get("llm");
   llmToggle.checked = Boolean(on);
-  await loadGliner();
+  await glinerLoad.catch(() => {});
   if (llmToggle.checked) await setLlm(true);
 })();
