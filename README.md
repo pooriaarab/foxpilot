@@ -65,6 +65,7 @@ The server writes logs to stderr. Run `node scripts/mcp-smoke.mjs` to test it. T
 - `pnpm ci:local`: runs the same checks as CI.
 - `pnpm e2e [flights|maps|walking] [--llm]`: runs a task end to end in Firefox. It writes a JSON result and a screenshot to `artifacts/`.
 - `node bin/foxpilot.mjs run --url <url> --goal <goal> [--llm] [--json]`: runs one goal in Firefox and prints the result. `--file tasks.jsonl` runs one `{"url", "goal"}` per line in one session, so the model loads once. Scripts can use the same session from `scripts/lib/firefox.mjs`, or call `window.foxpilot.run({ goal, tabId, llm })` in the panel.
+- `pnpm eval --zoo <zoo-sites checkout> [--tasks a,b] [--repeat N] [--limit N] [--extractor]`: runs the [zoo-sites](https://github.com/bgrins/zoo-sites) eval in Firefox and writes `docs/benchmarks/zoo-sites.md` and `.json`. zoo-sites' own validators grade each run. Run `npm install` in the checkout first. Most tasks grade typed fields from the answer, so they need `--extractor`: zoo-sites' answer extractor, a paid claude-haiku-4-5 call per answer. Without it they are reported as skipped. `--dry-run` lists the tasks and the reason for each skip.
 - `tests/parity.test.ts`: the JavaScript GLiNER2 runtime reproduces the token ids and outputs of the Python library on 14 recorded calls (fp32 and fp16).
 - `tests/verify.test.ts`: the goal check passes a sent, complete form. It fails a Round-trip form beside "One way trip from New York..." cards, a form that was never sent and a captcha page.
 - `tests/controller.test.ts`: the TypeScript controller makes the same decisions as the Python controller on captured Google Flights and Maps pages. `tests/oracle.py` produces the reference.
@@ -88,6 +89,6 @@ The server writes logs to stderr. Run `node scripts/mcp-smoke.mjs` to test it. T
 
 foxpilot is a port of [zipline](https://github.com/shreyaskarnik/zipline) by Shreyas Karnik (MIT).
 
-Controller, loop, page snapshot and date parsing are adapted from [gliner2-ultrafast](https://github.com/sahibzada-allahyar/gliner2-ultrafast) by Sahibzada Allahyar (MIT, copyright Browser Use). That project began from Browser Use's [jev-ultrafast](https://github.com/browser-use/jev-ultrafast). GLiNER2 is by [Fastino](https://fastino.ai) (Apache-2.0). foxpilot runs on [Transformers.js](https://github.com/huggingface/transformers.js).
+Controller, loop, page snapshot and date parsing are adapted from [gliner2-ultrafast](https://github.com/sahibzada-allahyar/gliner2-ultrafast) by Sahibzada Allahyar (MIT, copyright Browser Use). That project began from Browser Use's [jev-ultrafast](https://github.com/browser-use/jev-ultrafast). GLiNER2 is by [Fastino](https://fastino.ai) (Apache-2.0). foxpilot runs on [Transformers.js](https://github.com/huggingface/transformers.js). The benchmark runs [zoo-sites](https://github.com/bgrins/zoo-sites) by Brian Grinstead (Apache-2.0) from a separate checkout; no zoo-sites code is copied here.
 
 MIT licensed.
