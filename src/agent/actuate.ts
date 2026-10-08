@@ -149,8 +149,12 @@ export function pressKey(key: string): boolean {
     if (press && form && !submitted && location.href === href) {
       const button = [...form.elements].find((e): e is HTMLButtonElement | HTMLInputElement =>
         (e instanceof HTMLButtonElement || e instanceof HTMLInputElement) && (e.type === "submit" || e.type === "image"));
-      if (!button) form.requestSubmit();
-      else if (!button.disabled) button.click();
+      // HTML implicit submission: with no submit button, Enter submits only
+      // when the form has at most one field that blocks it.
+      const blocking = /^(text|search|url|tel|email|password|date|month|week|time|datetime-local|number)$/;
+      const blockers = [...form.elements].filter((e) => e instanceof HTMLInputElement && blocking.test(e.type)).length;
+      if (button) { if (!button.disabled) button.click(); }
+      else if (blockers <= 1) form.requestSubmit();
     }
     target.dispatchEvent(new KeyboardEvent("keyup", init));
   } finally {
