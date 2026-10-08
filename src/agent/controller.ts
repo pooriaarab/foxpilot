@@ -267,22 +267,61 @@ function rate(group: Group, probabilities: Record<string, number> | undefined): 
   return probabilities?.[clean(execute(group).label)] ?? 0;
 }
 
+/**
+ * Zipline addition: at most this many labels go into one classify call. Each
+ * label adds its name twice to the sequence, and a long sequence is slow.
+ */
+const LABEL_CAP = 32;
+
 /** Labels for one scoring pass, plus the negatives that keep it honest. */
 function schemaFor(ordered: Map<string, Group>, history: HistoryEntry[], valueTakers: boolean): Labels | null {
   const labels: Labels = {};
+  const open = new Set<string>();
+  const past = new Set<string>();
   for (const group of ordered.values()) {
     const action = execute(group);
     if (valueTakers && (action.kind === "click" || !group.open)) continue;
     labels[clean(action.label)] = KINDS[action.kind];
+    if (group.open) open.add(clean(action.label));
   }
   for (const entry of history) {
     if (!valueTakers && entry.kind in OPERATIONS) {
       const label = clean(entry.action);
+      past.add(label);
       if (!(label in labels)) labels[label] = KINDS[entry.kind];
     }
   }
   delete labels[""];
-  return Object.keys(labels).length ? labels : null;
+  // Over the cap, keep open controls first, then past actions, then closed
+  // controls, each in page order. The kept labels stay in their order.
+  const names = Object.keys(labels);
+  if (names.length > LABEL_CAP) {
+    const rank = (label: string) => (open.has(label) ? 0 : past.has(label) ? 1 : 2);
+    const kept = new Set(
+      names.map((label, index) => [label, index] as const)
+        .sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).slice(0, LABEL_CAP).map(([label]) => label),
+    );
+    for (const label of names) if (!kept.has(label)) delete labels[label];
+  }
+  return names.length ? labels : null;
+}
+
+/**
+ * Zipline addition: score only the controls that can be chosen now, so each
+ * call is shorter. While a dialog, menu or autocomplete list is open, best()
+ * picks only from it. While the agent fills a form and the goal still has
+ * values or dates for it, the form is what is left to use.
+ */
+function scope(ordered: Map<string, Group>, history: HistoryEntry[], parts: Part[]): Map<string, Group> {
+  const all = [...ordered];
+  if (all.some(([, group]) => group.open && execute(group).dialog)) {
+    return new Map(all.filter(([, group]) => execute(group).dialog));
+  }
+  const last = [...history].reverse().find((entry) => entry.kind === "fill" && entry.form != null);
+  if (!last || !parts.some((p) => p.values.length || p.date)) return ordered;
+  const inForm = (action: Action) => action.form === last.form && action.document_id === last.document_id;
+  if (!all.some(([, group]) => group.open && group.takesValue && inForm(execute(group)))) return ordered;
+  return new Map(all.filter(([, group]) => inForm(execute(group))));
 }
 
 /**
@@ -327,10 +366,11 @@ async function match(
   model: Scorer, state: Page, history: HistoryEntry[], refused: Set<string>, memory: Memory, parts: Part[],
 ): Promise<{ ordered: Map<string, Group>; results: Scores; latency: number }> {
   const ordered = groups(state, history, refused);
+  const scoped = scope(ordered, history, parts);
   const results: Scores = new Map();
   let latency = 0;
   const texts = parts.map((p) => p.text);
-  let [scored, spent] = await passOver(model, ordered, history, texts, false, memory);
+  let [scored, spent] = await passOver(model, scoped, history, texts, false, memory);
   for (const [k, v] of scored) results.set(k, v);
   latency += spent;
   const unsure: string[] = [];
@@ -346,7 +386,7 @@ async function match(
     if (!named && available.some((g) => g.takesValue)) unsure.push(part.text);
   }
   if (unsure.length) {
-    [scored, spent] = await passOver(model, ordered, history, unsure, true, memory);
+    [scored, spent] = await passOver(model, scoped, history, unsure, true, memory);
     for (const [k, v] of scored) results.set(k, v);
     latency += spent;
   }
