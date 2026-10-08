@@ -1,4 +1,6 @@
-(() => {
+// Injected by scripting.executeScript, which sends only this function's source:
+// it must not use anything from module scope.
+export function snapshot() {
   if (!document.body) return null;
   const cache = window.__glinerFast ||= {ids:new WeakMap(), nodes:new Map(), next:1};
   const identity = e => {
@@ -181,4 +183,4 @@
   actions.push({id:'wait',kind:'wait',label:'Wait for the page to update'});
   return {url:location.href,title:document.title,w:innerWidth,h:innerHeight,text,
     scroll:{y:scrollY,height},actions,marker,page_key,guards,omitted_actions};
-})()
+}

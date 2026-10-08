@@ -12,16 +12,25 @@ export type Answer = { text: string; score: number; label?: string };
 
 const MAX_CANDIDATES = 24;
 
+declare global {
+  interface Window {
+    __ziplineBlocks?: Element[];
+  }
+}
+
+// The page scripts below are injected by scripting.executeScript, which sends
+// only a function's source, so each one uses nothing from module scope.
+
 /** Collects visible text blocks (20–500 chars, the largest that are not a list of pieces) near the top. */
-const COLLECT = `(() => {
+function collect(max: number): { i: number; text: string }[] {
   document.getElementById('zipline-answer')?.remove();
   // A run often ends on exploratory scrolls; the answer is usually near the top.
   scrollTo(0, 0);
   const limit = innerHeight * 2.2;
-  const text = e => (e.innerText || '').replace(/\\s+/g, ' ').trim();
-  const out = [];
-  const visit = e => {
-    if (out.length >= ${MAX_CANDIDATES}) return;
+  const text = (e: Element) => ((e as HTMLElement).innerText || '').replace(/\s+/g, ' ').trim();
+  const out: Element[] = [];
+  const visit = (e: Element) => {
+    if (out.length >= max) return;
     const r = e.getBoundingClientRect();
     if (r.bottom < 0 || r.top > limit || r.width < 40 || r.height < 16) return;
     if (!e.checkVisibility({checkOpacity:true, checkVisibilityCSS:true})) return;
@@ -37,9 +46,9 @@ const COLLECT = `(() => {
   for (const child of document.body.children) visit(child);
   window.__ziplineBlocks = out;
   return out.map((e, i) => ({ i, text: text(e).slice(0, 300) }));
-})()`;
+}
 
-const HIGHLIGHT = (index: number, label = "✦ Zipline found this") => `((index, label) => {
+function highlight(index: number, label = "✦ Zipline found this"): boolean {
   const e = window.__ziplineBlocks?.[index];
   if (!e) return false;
   e.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -58,11 +67,11 @@ const HIGHLIGHT = (index: number, label = "✦ Zipline found this") => `((index,
     'box-shadow:0 6px 20px rgba(0,0,0,.35);white-space:nowrap}');
   root.adoptedStyleSheets = [sheet];
   for (const name of ['box', 'chip']) { const el = document.createElement('div'); el.className = name; root.append(el); }
-  root.querySelector('.chip').textContent = label;
+  root.querySelector('.chip')!.textContent = label;
   document.body.append(host);
   const place = () => {
     const r = e.getBoundingClientRect();
-    const box = root.querySelector('.box'), chip = root.querySelector('.chip');
+    const box = root.querySelector<HTMLElement>('.box')!, chip = root.querySelector<HTMLElement>('.chip')!;
     Object.assign(box.style, { left: r.left + scrollX + 'px', top: r.top + scrollY + 'px', width: r.width + 'px', height: r.height + 'px' });
     Object.assign(chip.style, { left: r.left + scrollX + 'px', top: r.top + scrollY + 'px' });
   };
@@ -72,23 +81,24 @@ const HIGHLIGHT = (index: number, label = "✦ Zipline found this") => `((index,
   // Dismiss on the first click anywhere.
   addEventListener('pointerdown', () => host.remove(), { once: true });
   return true;
-})(${index}, ${JSON.stringify(label)})`;
+}
 
 /** Candidate scores from the last search, for debugging. */
 export let lastScores: { text: string; score: number }[] = [];
 
 /** Rows of a results list: list items with a price, innermost first, top to bottom. */
-const COLLECT_ROWS = `(() => {
+function collectRows() {
   document.getElementById('zipline-answer')?.remove();
-  const text = e => (e.innerText || '').replace(/\\s+/g, ' ').trim();
-  const money = /[$€£¥₹]\\s?\\d|\\d\\s?(USD|EUR|GBP)\\b|\\d\\s?(US )?dollars\\b/i;
+  const text = (e: Element) => ((e as HTMLElement).innerText || '').replace(/\s+/g, ' ').trim();
+  const money = /[$€£¥₹]\s?\d|\d\s?(USD|EUR|GBP)\b|\d\s?(US )?dollars\b/i;
   const items = [...document.querySelectorAll('li,[role="listitem"],[role="row"]')];
   const stats = { items: items.length, priced: 0, long: 0, hidden: 0 };
   const rows = items.filter(e => {
     const t = text(e);
     if (t.length < 20 || !money.test(t)) return false;
     // A calendar week or a price grid ("9 $254 10 $244 …") is not a result.
-    if ((t.match(/[$€£¥₹]\s?\d/g) || []).length >= 3) return false;
+    // As the string version ran it: its template literal dropped both backslashes.
+    if ((t.match(/[$€£¥₹]s?d/g) || []).length >= 3) return false;
     stats.priced++;
     // Rows can carry long screen-reader text ("Leaves … at 6:00 AM").
     if (t.length > 2000) { stats.long++; return false; }
@@ -98,7 +108,7 @@ const COLLECT_ROWS = `(() => {
   const inner = rows.filter(r => !rows.some(o => o !== r && r.contains(o))).slice(0, 40);
   window.__ziplineBlocks = inner;
   return { stats, rows: inner.map((e, i) => ({ i, text: text(e).slice(0, 2000) })) };
-})()`;
+}
 
 const ROW_TYPES = {
   price: "a price or fare",
@@ -110,12 +120,11 @@ const ROW_TYPES = {
 async function pickRow(browser: TabBrowser, model: Scorer, goal: string): Promise<Answer | null> {
   const q = qualifiers(goal);
   if (!q) return null;
-  type Collected = { stats: { items: number; priced: number; long: number; hidden: number }; rows: { i: number; text: string }[] };
   // Results can still be rendering when the run ends; wait up to 3 s for rows.
-  let collected = await browser.evaluate<Collected>(COLLECT_ROWS);
+  let collected = await browser.evaluate(collectRows);
   for (let tries = 0; tries < 12 && !collected?.rows?.length; tries++) {
     await new Promise((resolve) => setTimeout(resolve, 250));
-    collected = await browser.evaluate<Collected>(COLLECT_ROWS);
+    collected = await browser.evaluate(collectRows);
   }
   const blocks = collected?.rows ?? [];
   if (!blocks.length) {
@@ -158,7 +167,7 @@ async function pickRow(browser: TabBrowser, model: Scorer, goal: string): Promis
     return null;
   }
   const label = describe(q, row);
-  await browser.evaluate(HIGHLIGHT(row.i, `✦ ${label}`));
+  await browser.evaluate(highlight, row.i, `✦ ${label}`);
   return { text: row.text, score: 1, label };
 }
 
@@ -174,13 +183,13 @@ const PRICE = /[$€£¥₹]\s?[\d,]+(?:\.\d+)?|[\d,]+(?:\.\d+)?\s?(?:US dollars
  * search below.
  */
 async function topRow(browser: TabBrowser): Promise<Answer | null> {
-  const collected = await browser.evaluate<{ rows: { i: number; text: string }[] }>(COLLECT_ROWS);
+  const collected = await browser.evaluate(collectRows);
   const rows = (collected?.rows ?? []).filter((r) => parseClock(r.text) !== undefined && PRICE.test(r.text));
   if (rows.length < 3) return null;
   const first = rows[0]!;
   const price = parseMoney(first.text.match(PRICE)?.[0]);
   const label = price !== undefined ? `Top result · $${price}` : "Top result";
-  await browser.evaluate(HIGHLIGHT(first.i, `✦ ${label}`));
+  await browser.evaluate(highlight, first.i, `✦ ${label}`);
   return { text: first.text, score: 1, label };
 }
 
@@ -258,7 +267,7 @@ export async function findAnswer(browser: TabBrowser, model: Scorer, goal: strin
   if (qualifiers(goal)) return null;
   const listed = await topRow(browser);
   if (listed) return listed;
-  const blocks = await browser.evaluate<{ i: number; text: string }[]>(COLLECT);
+  const blocks = await browser.evaluate(collect, MAX_CANDIDATES);
   if (!blocks?.length) return null;
   // Naming what an answer card is, and what the other blocks are, matters: with
   // just "answer vs other", anything about the topic ("People also ask …")
@@ -303,9 +312,11 @@ export async function findAnswer(browser: TabBrowser, model: Scorer, goal: strin
     const [label] = Object.entries(probabilities).sort((a, b) => b[1] - a[1])[0]!;
     best = byLabel.get(label) ?? best;
   }
-  await browser.evaluate(HIGHLIGHT(best.i));
+  await browser.evaluate(highlight, best.i);
   return { text: best.text, score: best.score };
 }
 
 /** Removes a previous run's highlight. */
-export const CLEAR = `document.getElementById('zipline-answer')?.remove()`;
+export function clear(): void {
+  document.getElementById('zipline-answer')?.remove();
+}
