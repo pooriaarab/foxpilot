@@ -290,10 +290,17 @@ export type RunResult = {
   evaluateCalls: Record<string, Calls>;
 };
 
+/** The controls the agent sees on a tab, without geometry and guards. */
+export type Controls = {
+  url: string;
+  title: string;
+  controls: { id: string; kind: string; label: string; section?: string; value?: string }[];
+};
+
 declare global {
   interface Window {
     /** The run API for scripts (scripts/lib/firefox.mjs). The Run button uses it too. */
-    foxpilot: { run(options: RunOptions): Promise<RunResult>; ready(): Promise<{ modelLoadMs: number }>; last(): RunResult | null };
+    foxpilot: { run(options: RunOptions): Promise<RunResult>; ready(): Promise<{ modelLoadMs: number }>; last(): RunResult | null; snapshot(tabId: number): Promise<Controls> };
   }
 }
 
@@ -527,7 +534,18 @@ llmToggle.addEventListener("change", () => void setLlm(llmToggle.checked));
 const glinerLoad = loadGliner();
 glinerLoad.catch(() => {});
 
-window.foxpilot = { run, ready: () => glinerLoad.then((modelLoadMs) => ({ modelLoadMs })), last: () => lastResult };
+async function snapshotControls(tabId: number): Promise<Controls> {
+  const browser = await TabBrowser.attach(tabId);
+  try {
+    const page = await browser.observe();
+    const controls = page.actions.map(({ id, kind, label, section, value }) => ({ id, kind, label, section, value }));
+    return { url: page.url, title: page.title, controls };
+  } finally {
+    await browser.detach();
+  }
+}
+
+window.foxpilot = { run, ready: () => glinerLoad.then((modelLoadMs) => ({ modelLoadMs })), last: () => lastResult, snapshot: snapshotControls };
 
 (async () => {
   const { llm: on } = await chrome.storage.local.get("llm");
