@@ -6,6 +6,7 @@
 //   const tabId = await session.openTask(url);    // loads url in the task tab
 //   const { modelLoadMs } = await session.ready(); // waits for GLiNER2
 //   const result = await session.run(goal, { tabId, llm }); // RunResult, src/panel/sidepanel.ts
+//   const page = await session.snapshot(tabId);   // {url, title, controls}: what the agent sees
 //   await session.screenshot(path);                // the task tab
 //   await session.close();
 //
@@ -129,6 +130,7 @@ function session(browser, task, panel, close) {
         return panel.evaluate(() => window.foxpilot.last());
       });
     },
+    snapshot: (tab) => panel.evaluate((id) => window.foxpilot.snapshot(id), tab),
     screenshot: (path) => task.screenshot({ path }),
     close,
   };

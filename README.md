@@ -42,6 +42,24 @@ pnpm build            # writes dist/
 
 A temporary add-on is removed when you close Firefox. Load it again for the next session.
 
+## Use foxpilot from an agent (MCP)
+
+`foxpilot mcp` is an MCP server on stdio. It starts one Firefox on the first tool call. GLiNER2 loads once and stays warm.
+
+```bash
+pnpm build
+claude mcp add foxpilot -- node /abs/path/to/foxpilot/bin/foxpilot.mjs mcp
+```
+
+Tools:
+
+- `run_task({url, goal, llm?})` opens the URL, runs the goal, and returns the run result as JSON.
+- `open_url({url})` opens the URL in the task tab. It returns `{tabId, url}`.
+- `snapshot()` lists the controls the agent sees on the task tab.
+- `close()` closes Firefox. The next call starts a new one.
+
+The server writes logs to stderr. Run `node scripts/mcp-smoke.mjs` to test it. The script exits 0 only when the flights run is verified.
+
 ## Verification
 
 - `pnpm ci:local`: runs the same checks as CI.
