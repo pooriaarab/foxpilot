@@ -148,9 +148,10 @@ export class TabBrowser {
     }
   }
 
-  async observe(): Promise<Page> {
-    if (this.afterInput) {
-      const action = this.afterInput;
+  /** Reads the page. After input, or with `quiet`, first waits for it to settle. */
+  async observe(quiet = false): Promise<Page> {
+    const action = this.afterInput ?? (quiet ? ({ id: "", kind: "wait", label: "" } as Action) : null);
+    if (action) {
       this.afterInput = null;
       try {
         await this.evaluate(settle, action);
