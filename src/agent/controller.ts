@@ -9,6 +9,7 @@ import { destinationAsk, isSearchField } from "./search";
 import { parseAsk, properName } from "./ask";
 import { patience } from "./patience";
 import { acceptsAll, declining, refusing, stanceOf, type Control } from "./dialogs";
+import { blocks, CLOSED, type Policy } from "./policy";
 
 export type Labels = Record<string, string | undefined>;
 
@@ -225,13 +226,13 @@ const OPTION_ROLES = new Set(["option", "menuitemradio", "menuitemcheckbox", "ra
 
 /**
  * Zipline addition: controls that change the user's account or spend money are
- * never chosen (they stay in the label set, so scores match the Python controller). A run once clicked "Track prices…" and left a tracked flight
- * behind; a browsing agent should not sign in, subscribe, buy or delete.
+ * not chosen unless the ask names them (they stay in the label set, so scores
+ * match the Python controller). A run once clicked "Track prices…" and left a
+ * tracked flight behind; a browsing agent signs in, subscribes, buys or
+ * deletes only when told to (policy.ts).
  */
-const UNSAFE = /\b(track prices?|sign (in|out|up)|log ?(in|out)|subscribe|unsubscribe|delete|remove account|buy now|purchase|pay now|place order|checkout|book now|book with|reserve now|continue to book(ing)?)\b/i;
-
-export function isUnsafe(action: Action): boolean {
-  return UNSAFE.test(action.label);
+export function isUnsafe(action: Action, rules: Policy = CLOSED): boolean {
+  return blocks(rules, action);
 }
 
 /**
@@ -473,7 +474,7 @@ async function passOver(
 }
 
 /** Assign requirements to available controls, respecting modal scope and explicit dates. */
-function best(ordered: Map<string, Group>, scores: Scores, parts: Part[]): Chosen[] {
+function best(ordered: Map<string, Group>, scores: Scores, parts: Part[], rules: Policy): Chosen[] {
   const valued = new Set(parts.filter((p) => p.values.length).map((p) => p.text));
   const valuesOf = new Map(parts.map((p) => [p.text, p.values]));
   const dates = parts.filter((p) => p.date).map((p) => [p.text, p.date!] as const);
@@ -508,7 +509,7 @@ function best(ordered: Map<string, Group>, scores: Scores, parts: Part[]): Chose
   }
   const offers: [Group, Map<number, number>][] = [];
   for (const group of openGroups) {
-    if (isUnsafe(execute(group)) || sends(execute(group))) continue;
+    if (isUnsafe(execute(group), rules) || sends(execute(group))) continue;
     const column = new Map<number, number>();
     texts.forEach((text, index) => {
       const score = rate(group, scores.get(text));
@@ -596,7 +597,9 @@ function top(probabilities: Record<string, number>): [string, number] {
 const asLabels = (names: Iterable<string>): Labels => Object.fromEntries([...names].map((n) => [n, undefined]));
 
 /** Select a pending dialog action or score its available confirmation controls. */
-async function dialog(model: Scorer, ordered: Map<string, Group>, chosen: Chosen[], history: HistoryEntry[], goal: Part[]): Promise<Chosen[] | null> {
+async function dialog(
+  model: Scorer, ordered: Map<string, Group>, chosen: Chosen[], history: HistoryEntry[], goal: Part[], rules: Policy,
+): Promise<Chosen[] | null> {
   const inside = new Map<string, Group>();
   for (const group of ordered.values()) {
     if (execute(group).dialog) inside.set(clean(execute(group).label), group);
@@ -606,7 +609,7 @@ async function dialog(model: Scorer, ordered: Map<string, Group>, chosen: Chosen
   const stance = stanceOf(goal.map((p) => p.text).join(" "));
   const controls: Control[] = [...inside].map(([label, group]) => ({
     label, action: execute(group),
-    pick: group.open && !firstDate(label) && !OPTION_ROLES.has(execute(group).role ?? "") && !isUnsafe(execute(group)),
+    pick: group.open && !firstDate(label) && !OPTION_ROLES.has(execute(group).role ?? "") && !isUnsafe(execute(group), rules),
   }));
   const turn = (found: { label: string; score: number } | null) =>
     found ? [{ requirement: null, score: found.score, group: inside.get(found.label)! }] : null;
@@ -620,7 +623,7 @@ async function dialog(model: Scorer, ordered: Map<string, Group>, chosen: Chosen
   // Zipline addition: confirming a dialog means a button, not one of a menu's
   // options (it picked 'Round trip' in an open ticket-type menu).
   const openable = new Map(
-    [...inside].filter(([label, group]) => group.open && !firstDate(label) && !OPTION_ROLES.has(execute(group).role ?? "") && !isUnsafe(execute(group))),
+    [...inside].filter(([label, group]) => group.open && !firstDate(label) && !OPTION_ROLES.has(execute(group).role ?? "") && !isUnsafe(execute(group), rules)),
   );
   if (!openable.size) return null;
   // Zipline addition: a popup that appeared while typing is an autocomplete,
@@ -672,11 +675,18 @@ export function unsentForms(state: Page, history: HistoryEntry[]): Set<string> {
 
 /** Find a submission action for a populated, uncommitted form. */
 async function unsentForm(
-  model: Scorer, state: Page, ordered: Map<string, Group>, history: HistoryEntry[], chosen: Chosen[],
+  model: Scorer, state: Page, ordered: Map<string, Group>, history: HistoryEntry[], chosen: Chosen[], rules: Policy,
 ): Promise<Chosen | null> {
   const pending = unsentForms(state, history);
   if (!pending.size) return null;
   const inPending = (form: unknown) => form != null && pending.has(JSON.stringify(form));
+  // A form whose submit button the ask forbids ("do NOT press the final
+  // Submit button") is not sent at all: Enter would press that button too.
+  for (const group of ordered.values()) {
+    const action = execute(group);
+    if (action.submit && inPending(action.form) && isUnsafe(action, rules)) pending.delete(JSON.stringify(action.form));
+  }
+  if (!pending.size) return null;
   for (const group of ordered.values()) {
     const action = execute(group);
     if (group.open && action.submit && inPending(action.form)) return { requirement: null, score: 1.0, group };
@@ -686,7 +696,7 @@ async function unsentForm(
   for (const group of ordered.values()) {
     const action = execute(group);
     const usable = group.open || (sends(action) && editedSince(action, history));
-    if (usable && action.kind === "click" && inPending(action.form) && !isUnsafe(action)) buttons.set(clean(action.label), group);
+    if (usable && action.kind === "click" && inPending(action.form) && !isUnsafe(action, rules)) buttons.set(clean(action.label), group);
   }
   if (!buttons.size) return enter(state);
   const [value, confidence] = top(await model.classify(SUBMIT, "submit", asLabels(buttons.keys())));
@@ -830,21 +840,21 @@ function idle(history: HistoryEntry[]): number {
 /** One observation, one decision. */
 export async function choose(
   model: Scorer, state: Page, history: HistoryEntry[], memory: Memory, refused: Set<string>,
-  allParts: Part[], served: Set<string>, goal = "",
+  allParts: Part[], served: Set<string>, goal = "", rules: Policy = CLOSED,
 ): Promise<Decision> {
   const parts = allParts.filter((p) => !served.has(p.text));
   // Zipline addition: dates are resolved and matched in code. When an open
   // picker already shows the wanted day, scoring every part against 50 day
   // labels only to ignore the scores cost 1.3–3 s per step on Google Flights.
-  const picked = parts.some((p) => p.date) ? best(groups(state, history, refused), new Map(), parts) : [];
+  const picked = parts.some((p) => p.date) ? best(groups(state, history, refused), new Map(), parts, rules) : [];
   const { ordered, results: scores, latency } = picked.length
     ? { ordered: groups(state, history, refused), results: new Map() as Scores, latency: 0 }
     : await match(model, state, history, refused, memory, parts);
-  let chosen = best(ordered, scores, parts);
-  const sending = await unsentForm(model, state, ordered, history, chosen);
+  let chosen = best(ordered, scores, parts, rules);
+  const sending = await unsentForm(model, state, ordered, history, chosen, rules);
   if (sending) chosen = [sending, ...chosen];
   const committing = picked.length ? null : await suggestion(model, ordered, history, parts);
-  chosen = committing ? [committing] : ((await dialog(model, ordered, chosen, history, allParts)) ?? chosen);
+  chosen = committing ? [committing] : ((await dialog(model, ordered, chosen, history, allParts, rules)) ?? chosen);
   const commits = Boolean(committing);
   if (!chosen.length) {
     const following = await followLink(model, state, ordered, history, parts, goal);
@@ -879,7 +889,7 @@ export async function choose(
     covered = [];
     // Termination is heuristic; callers must verify the actual outcome.
     const waited = idle(history);
-    const patient = patience(allParts.map((p) => p.text).join(" "), parts.length, state, history, (a) => !isUnsafe(a));
+    const patient = patience(allParts.map((p) => p.text).join(" "), parts.length, state, history, (a) => !isUnsafe(a, rules));
     const wait = patient?.kind === "wait" || (history.length && waited < 2) ? control(state, "wait") : undefined;
     const scroll = waited < 4 ? control(state, "scroll_down") : undefined;
     if (patient?.kind === "retry") [choice, operation, confidence] = [patient.action.id, "CLICK", 1.0];

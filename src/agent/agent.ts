@@ -4,6 +4,7 @@ import { parseAsk } from "./ask";
 import { TabBrowser, StalePage } from "./browser";
 import { choose, requirements, sends, type Decision, type Memory, type Part, type Scorer } from "./controller";
 import { firstDate, normalise } from "./dates";
+import { MASK, policy, type Policy } from "./policy";
 import { Refused, type FieldContext, type FieldWriter } from "./fieldtext";
 import { searchQuery } from "./search";
 import { stripQualifiers } from "./pick";
@@ -118,6 +119,7 @@ export class Agent {
     private readonly writer: FieldWriter,
     private readonly onUpdate: (view: AgentView) => void,
     private readonly surfaces: SpansFound,
+    private readonly rules: Policy,
   ) {
     this.view = { status: "ready", goal, parts, history: [], decision: null, textCalls: [], refusals: [], elapsedMs: 0, modelMs: 0 };
   }
@@ -144,7 +146,7 @@ export class Agent {
     const parts = await requirements(values.length ? task : stripQualifiers(task) || task, recording);
     // A dictated value is typed as written, not as GLiNER2 cased its span.
     for (const value of values) found.set(value.value.toLowerCase(), value.value);
-    const agent = new Agent(model, browser, task, parts, makeWriter(parts, found, model), onUpdate, found);
+    const agent = new Agent(model, browser, task, parts, makeWriter(parts, found, model), onUpdate, found, policy(task));
     // A page that just loaded may not have drawn its controls yet (a site
     // opened for the goal); give it up to 3 s before judging it.
     agent.page = await browser.observe();
@@ -233,7 +235,7 @@ export class Agent {
       },
     };
     const started = performance.now();
-    const decision = await choose(counted, this.page, this.view.history, this.memory, this.refused, this.parts, this.served, this.view.goal);
+    const decision = await choose(counted, this.page, this.view.history, this.memory, this.refused, this.parts, this.served, this.view.goal, this.rules);
     const decide = Math.round(performance.now() - started);
     this.timing = { decide, calls: stats.calls, model: Math.round(stats.model), labels: stats.labels, act: 0, observe: 0 };
     this.view.modelMs += decision.latencyMs;
@@ -282,7 +284,13 @@ export class Agent {
       };
       const started = performance.now();
       try {
-        text = normalise(await this.writer.write(context), decision.date);
+        // A password field takes the password the ask dictates; no writer sees it.
+        text = action.secret ? this.rules.password : normalise(await this.writer.write(context), decision.date);
+        if (text == null) throw new Refused("The goal dictates no password");
+        // The password goes into a password field only, never into one the page shows.
+        if (!action.secret && this.rules.password && text.includes(this.rules.password)) {
+          throw new Refused("The value holds the password and the field is not a password field");
+        }
       } catch (error) {
         if (!(error instanceof Refused)) throw error;
         // The goal supplies no value for this field. Nothing is guessed; the
@@ -295,7 +303,7 @@ export class Agent {
         return;
       }
       textMs = Math.round(performance.now() - started);
-      this.view.textCalls.push({ field: action.label, value: text, ms: textMs });
+      this.view.textCalls.push({ field: action.label, value: action.secret ? MASK : text, ms: textMs });
       // The whole goal went in as a search query, so every part of it is asked;
       // what is left is submitting it, not clicking results that name a part.
       if (text === searchQuery(this.view.goal)) for (const part of this.parts) this.served.add(part.text);
@@ -319,7 +327,7 @@ export class Agent {
       // Taking a suggestion commits the field it completes, not the form around it.
       committed_field: decision.commits ? (lastFill(history)?.action ?? null) : null,
       committed_node: decision.commits ? (lastFill(history)?.node ?? null) : null,
-      text,
+      text: action.secret ? MASK : text,
       operation: decision.operation,
       target: decision.target,
       confidence: decision.confidence,
