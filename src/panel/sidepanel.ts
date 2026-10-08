@@ -51,21 +51,28 @@ function setModel(prefix: "gliner" | "llm", state: "idle" | "loading" | "ok" | "
   if (progress !== undefined) (bar.firstElementChild as HTMLElement).style.width = `${Math.round(progress * 100)}%`;
 }
 
-/** Where a run starts when the tab is a page Chrome won't let extensions drive (New Tab, settings…). */
+/** Where a run starts when the tab is a page Firefox never lets extensions drive (New Tab, about:…). */
 const START_PAGE = "https://www.google.com/";
 
+/**
+ * Pages no extension can script. See MDN, "Content scripts", "Restricted domains":
+ * https://developer.mozilla.org/docs/Mozilla/Add-ons/WebExtensions/Content_scripts
+ * about: pages (not reader view, which gets an error), view-source:, moz-extension:,
+ * and the domains in Firefox 157's extensions.webextensions.restrictedDomains pref.
+ * The URL decides this, never the text of an error.
+ */
+const RESTRICTED_URL =
+  /^(about:(?!reader)|view-source:|moz-extension:|https:\/\/(accounts-static\.cdn\.mozilla\.net|accounts\.firefox\.com|addons\.cdn\.mozilla\.net|addons\.mozilla\.org|api\.accounts\.firefox\.com|content\.cdn\.mozilla\.net|discovery\.addons\.mozilla\.org|oauth\.accounts\.firefox\.com|profile\.accounts\.firefox\.com|support\.mozilla\.org|sync\.services\.mozilla\.com)(\/|$))/i;
+
 async function attachOrOpenStart(tabId: number): Promise<TabBrowser> {
-  try {
-    return await TabBrowser.attach(tabId);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (!/chrome:\/\/|chrome-extension:\/\/|Cannot access|Cannot attach|edge:\/\//i.test(message)) throw error;
-    $("clock-sub").textContent = "This page can't be driven; opening google.com…";
-    await navigateAndWait(tabId, START_PAGE);
-    const browser = await TabBrowser.attach(tabId);
-    await browser.waitForLoad();
-    return browser;
-  }
+  const tab = await chrome.tabs.get(tabId);
+  // Any other attach error propagates to the panel and the tab stays as it is.
+  if (!RESTRICTED_URL.test(tab.url ?? "")) return TabBrowser.attach(tabId);
+  $("clock-sub").textContent = "This page can't be driven; opening google.com…";
+  await navigateAndWait(tabId, START_PAGE);
+  const browser = await TabBrowser.attach(tabId);
+  await browser.waitForLoad();
+  return browser;
 }
 
 function navigateAndWait(tabId: number, url: string): Promise<void> {
