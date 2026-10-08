@@ -1,12 +1,14 @@
 // GLiNER2 timing in the browser. Bundled and served by bench/run.mjs, which passes
-// ?device=&dtype=&tests= and, for some runs, &threads=&session=.
+// ?device=&dtype=&tests= and, for some runs, &threads=&session=&model=. A model
+// other than the default is a local directory that bench/run.mjs serves.
 // Tests: shape (same against new shape), sweep (ms against token count),
-// split (one call cut into encode / run / read back).
+// split (one call cut into encode / run / read back), batch (one run of 4
+// prompts against 4 single runs; needs the batched export, #90).
 import { env, Tensor } from "@huggingface/transformers";
 import { Gliner2 } from "../src/model/gliner2";
 import type { Labels } from "../src/model/gliner2";
 
-const MODEL = "onnx-community/gliner2-multi-v1-agent-ONNX";
+const HUB_MODEL = "onnx-community/gliner2-multi-v1-agent-ONNX";
 const SAME_CALLS = 10;
 const NEW_CALLS = 10;
 const SWEEP_CALLS = 5;
@@ -22,11 +24,19 @@ const SESSIONS: Record<string, Record<string, unknown>> = {
 const params = new URLSearchParams(location.search);
 const device = (params.get("device") ?? "webgpu") as "webgpu" | "wasm";
 const dtype = (params.get("dtype") ?? "fp16") as "fp16" | "fp32";
+const local = params.get("model");
+const MODEL = local ?? HUB_MODEL;
 const session = params.get("session") ?? "default";
 const tests = (params.get("tests") ?? "shape").split(",");
 const threads = params.get("threads");
 
 env.useWasmCache = false;
+if (local) {
+  env.allowLocalModels = true;
+  env.allowRemoteModels = false;
+  // A path, not a URL: Transformers.js skips a local path that is a URL when it checks a file exists.
+  env.localModelPath = "/models/";
+}
 const wasm = env.backends.onnx.wasm as { wasmPaths: unknown; numThreads?: number };
 wasm.wasmPaths = {
   mjs: `${location.origin}/ort/ort-wasm-simd-threaded.asyncify.mjs`,
@@ -52,6 +62,12 @@ type GpuDevice = {
 type Feeds = Record<string, Tensor>;
 const ortOf = (t: Tensor) => (t as unknown as { ort_tensor: OrtTensor }).ort_tensor;
 const long = (values: number[]) => new Tensor("int64", BigInt64Array.from(values, BigInt), [1, values.length]);
+/** Rows padded with 0 to the longest, as one [B, n] tensor. */
+const longRows = (rows: number[][]) => {
+  const n = Math.max(...rows.map((r) => r.length));
+  const data = BigInt64Array.from(rows.flatMap((r) => [...r, ...new Array<number>(n - r.length).fill(0)]), BigInt);
+  return new Tensor("int64", data, [rows.length, n]);
+};
 
 /** The same tensor in a GPU buffer, which graph capture needs for every input. */
 function gpuLong(gpu: GpuDevice, values: number[]): Tensor {
@@ -167,6 +183,65 @@ async function main() {
     const rows = [];
     for (let i = 0; i < SAME_CALLS; i++) rows.push(await parts(input));
     result.split = { tokens: tokens(TEXT, labels), coldMs: cold.totalMs, ...medians(rows) };
+  }
+  if (tests.includes("batch")) {
+    // Four requirements scored against the same controls, as #84 wants. The
+    // rows differ in length, so the batch is padded.
+    const goals = [TEXT, "Find a cheap hotel in Lisbon for two nights.", "Book a table for 4 at 7:30 pm on Friday.", "Show walking directions to the Brandenburg Gate."];
+    const labels = labelsOf(20);
+    const rows = goals.map((text) => encode(text, labels));
+    const single = rows.map((e) => ({
+      input_ids: long(e.inputIds),
+      attention_mask: long(new Array<number>(e.inputIds.length).fill(1)),
+      word_positions: long(e.wordPositions),
+      schema_positions: long(e.schemaPositions),
+    }));
+    const batched = {
+      input_ids: longRows(rows.map((e) => e.inputIds)),
+      attention_mask: longRows(rows.map((e) => new Array<number>(e.inputIds.length).fill(1))),
+      word_positions: longRows(rows.map((e) => e.wordPositions)),
+      schema_positions: longRows(rows.map((e) => e.schemaPositions)),
+    };
+    const softmax = (x: number[]) => {
+      const max = Math.max(...x);
+      const exp = x.map((v) => Math.exp(v - max));
+      const sum = exp.reduce((a, b) => a + b, 0);
+      return exp.map((v) => v / sum);
+    };
+    /** One run; reads back cls_logits only, like classify. */
+    const once = async (feeds: Feeds) => {
+      const out = await inner(feeds);
+      const cls = ortOf(out.cls_logits!);
+      const data = Array.from((cls.location === "gpu-buffer" ? await cls.getData() : out.cls_logits!.data) as Float32Array);
+      for (const o of Object.values(out)) if (ortOf(o).location === "gpu-buffer") ortOf(o).dispose();
+      return data;
+    };
+    const timed = async (fn: () => Promise<unknown>) => {
+      const s = performance.now();
+      await fn();
+      return performance.now() - s;
+    };
+    const singles = async () => {
+      const all = [];
+      for (const feeds of single) all.push(await once(feeds));
+      return all;
+    };
+    // Warm both shapes, and check each batched row against its single run.
+    const one = await singles();
+    const many = await once(batched);
+    const width = Object.keys(labels).length;
+    const maxDiff = Math.max(...one.map((row, i) => {
+      const got = softmax(many.slice(i * width, (i + 1) * width));
+      return Math.max(...softmax(row).map((p, j) => Math.abs(p - got[j]!)));
+    }));
+    const batchMs: number[] = [];
+    const singleMs: number[] = [];
+    for (let i = 0; i < SAME_CALLS; i++) {
+      batchMs.push(await timed(() => once(batched)));
+      singleMs.push(await timed(singles));
+    }
+    const [b, s] = [stats(batchMs).median, stats(singleMs).median];
+    result.batch = { size: goals.length, tokens: rows.map((e) => e.inputIds.length), batchMs: b, singlesMs: s, perCallBatchMs: b / goals.length, perCallSingleMs: s / goals.length, speedup: s / b, maxProbDiff: maxDiff };
   }
   return result;
 }
