@@ -23,11 +23,43 @@ function actionLabel(action: Action, text?: string | null): string {
 }
 
 type FrameEvent = { tabId: number; frameId: number };
+type Injected = (...args: never[]) => unknown;
+
+/** Calls to one injected function: how many, and their total ms. */
+export type Calls = { count: number; ms: number };
+
+/** Injected functions by name. The build minifies function names; object keys stay. */
+const names = new Map<Injected, string>();
+
+/** Names injected functions, so `TabBrowser.calls` can count them. */
+export function nameInjected(functions: Record<string, Injected>): void {
+  for (const [name, func] of Object.entries(functions)) names.set(func, name);
+}
+
+function attached() { return true; }
+
+function readyState() { return document.readyState; }
+
+function nodeGuard(node: number) {
+  const c = window.__glinerFast;
+  return c ? [c.pageKey(), c.guard(c.nodes.get(node))] : null;
+}
+
+function scrollIntoView(node: number) {
+  window.__glinerFast?.nodes.get(node)?.scrollIntoView({ block: "center", inline: "center" });
+  return true;
+}
+
+nameInjected({ attached, readyState, nodeGuard, scrollIntoView, snapshot, settle, clickAt, fillField, markTarget, pressKey, resolveTarget, scrollAt });
 
 export class TabBrowser {
   private afterInput: Action | null = null;
   /** Outline each element before acting on it. */
   showActions = true;
+  /** Every `evaluate` call since attaching, by function name. */
+  readonly calls: Record<string, Calls> = {};
+  /** Which check failed when `fresh` last returned false. */
+  stale = "";
 
   private constructor(readonly tabId: number) {}
 
@@ -46,7 +78,7 @@ export class TabBrowser {
   static async attach(tabId: number): Promise<TabBrowser> {
     const browser = new TabBrowser(tabId);
     // Fails here, not mid-run, when the page cannot be scripted. The panel decides from the URL what to do.
-    await browser.evaluate(() => true).catch((error: Error) => {
+    await browser.evaluate(attached).catch((error: Error) => {
       throw new Error(`Cannot attach to this page: ${error.message}`);
     });
     // Load events tell a search that navigates (Amazon) from one that updates in place.
@@ -88,11 +120,16 @@ export class TabBrowser {
    */
   async evaluate<A extends unknown[], T>(func: (...args: A) => T, ...args: A): Promise<Awaited<T>> {
     let results: { result?: unknown; error?: unknown }[];
+    const calls = (this.calls[names.get(func as Injected) ?? "unnamed"] ??= { count: 0, ms: 0 });
+    const started = performance.now();
     try {
       results = await chrome.scripting.executeScript({ target: { tabId: this.tabId }, world: "ISOLATED", injectImmediately: true, func, args });
     } catch (error) {
       // Usually the document navigated mid-evaluation; keep the browser's own message for the rest.
       throw new StalePage(`Document changed during evaluation (${error instanceof Error ? error.message : String(error)})`);
+    } finally {
+      calls.count++;
+      calls.ms += performance.now() - started;
     }
     const [first] = results;
     if (!first || first.error) throw new StalePage(`Document changed during evaluation${first?.error ? ` (${String(first.error)})` : ""}`);
@@ -103,7 +140,7 @@ export class TabBrowser {
     const deadline = performance.now() + timeoutMs;
     while (performance.now() < deadline) {
       try {
-        if ((await this.evaluate(() => document.readyState)) === "complete") return;
+        if ((await this.evaluate(readyState)) === "complete") return;
       } catch {
         // navigating
       }
@@ -135,17 +172,21 @@ export class TabBrowser {
     throw new StalePage("Page did not settle");
   }
 
+  /** Is the page still the one `page` read? When not, `stale` names the check that failed. */
   async fresh(page: Page, action?: Action): Promise<boolean> {
     if (action && (action.kind === "click" || action.kind === "select")) {
-      if (typeof action.node !== "number") return false;
-      const current = await this.evaluate((node: number) => {
-        const c = window.__glinerFast;
-        return c ? [c.pageKey(), c.guard(c.nodes.get(node))] : null;
-      }, action.node);
-      if (!current || !sameValue(current[1], page.guards[String(action.node)])) return false;
-      return unchanged(page.page_key, current[0] as unknown[]);
+      if (typeof action.node !== "number") return this.failed("no node");
+      const current = await this.evaluate(nodeGuard, action.node);
+      if (!current) return this.failed("node gone");
+      if (!sameValue(current[1], page.guards[String(action.node)])) return this.failed("guard");
+      return unchanged(page.page_key, current[0] as unknown[]) || this.failed("page key");
     }
-    return sameValue((await this.evaluate(snapshot))?.marker ?? null, page.marker);
+    return sameValue((await this.evaluate(snapshot))?.marker ?? null, page.marker) || this.failed("marker");
+  }
+
+  private failed(check: string): false {
+    this.stale = check;
+    return false;
   }
 
   async act(action: Action, page: Page, text?: string | null): Promise<void> {
@@ -153,7 +194,7 @@ export class TabBrowser {
     // Waiting and scrolling cannot hit the wrong target, so a page that keeps
     // changing on its own (live results, tickers) must not block them.
     if (kind !== "wait" && kind !== "scroll" && !(await this.fresh(page, action))) {
-      throw new StalePage("Page changed since this decision. Observe again.");
+      throw new StalePage(`Page changed since this decision (${this.stale}). Observe again.`);
     }
     if (kind === "wait") {
       await sleep(600);
@@ -164,10 +205,7 @@ export class TabBrowser {
     } else {
       if (typeof action.node !== "number") throw new Error("Invalid observed node");
       if (action.offscreen) {
-        await this.evaluate((node: number) => {
-          window.__glinerFast?.nodes.get(node)?.scrollIntoView({ block: "center", inline: "center" });
-          return true;
-        }, action.node);
+        await this.evaluate(scrollIntoView, action.node);
         await sleep(50);
       }
       const target = await this.evaluate(resolveTarget, action);

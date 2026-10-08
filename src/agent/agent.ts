@@ -31,6 +31,9 @@ export type Step = HistoryEntry & {
 
 export type Timing = { decide: number; calls: number; model: number; labels: number; act: number; observe: number };
 
+/** A decision the stale check stopped: the step it was for, its target, and the check that failed. */
+export type Refusal = { step: number; target: string | null; reason: string };
+
 export type AgentView = {
   status: Status;
   goal: string;
@@ -38,6 +41,7 @@ export type AgentView = {
   history: Step[];
   decision: Decision | null;
   textCalls: { field: string; value?: string; error?: string; ms?: number }[];
+  refusals: Refusal[];
   elapsedMs: number;
   modelMs: number;
   message?: string;
@@ -114,7 +118,7 @@ export class Agent {
     private readonly onUpdate: (view: AgentView) => void,
     private readonly surfaces: SpansFound,
   ) {
-    this.view = { status: "ready", goal, parts, history: [], decision: null, textCalls: [], elapsedMs: 0, modelMs: 0 };
+    this.view = { status: "ready", goal, parts, history: [], decision: null, textCalls: [], refusals: [], elapsedMs: 0, modelMs: 0 };
   }
 
   /** Reads the goal's requirements once (before the clock starts) and observes the tab. */
@@ -185,13 +189,16 @@ export class Agent {
       this.view.status = "blocked";
       throw new Error(`Stopped after ${FRUITLESS} decisions that could not be executed`);
     }
+    let decision: Decision | null = null;
     try {
       await this.predict();
+      decision = this.view.decision;
       const before = this.view.history.length;
       await this.act();
       this.fruitless = this.view.history.length > before ? 0 : this.fruitless + 1;
     } catch (error) {
       if (!(error instanceof StalePage)) throw error;
+      this.view.refusals.push({ step: this.view.history.length + 1, target: decision?.target ?? null, reason: error.message });
       this.fruitless += 1;
       this.view.decision = null;
       this.view.status = "ready";
