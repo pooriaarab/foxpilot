@@ -1,7 +1,10 @@
-// Puts the tab Zipline drives into its own tab group and keeps the group's
+// Puts the tab foxpilot drives into its own tab group and keeps the group's
 // title as a live status: ⚡ running, ✅ done, ⛔ blocked, ⏹ stopped, ⚠️ error.
 // The final status shows for a few seconds, then the group is dissolved.
 // A tab the user already grouped is left in its group and not relabelled.
+// Compat source: MDN browser-compat-data (webextensions/api/tabGroups.json,
+// tabs.json): tabs.group/ungroup and Tab.groupId since Firefox 138;
+// tabGroups.get/update, TAB_GROUP_ID_NONE and Color since Firefox 139.
 import type { AgentView } from "../agent/agent";
 
 type Color = `${chrome.tabGroups.Color}`;
@@ -12,7 +15,7 @@ export class TabGroupStatus {
   private constructor(
     private readonly groupId: number | null,
     private readonly tabId: number,
-    /** Only groups Zipline created are dissolved. */
+    /** Only groups foxpilot created are dissolved. */
     private readonly owned: boolean,
   ) {}
 
@@ -21,8 +24,8 @@ export class TabGroupStatus {
       const tab = await chrome.tabs.get(tabId);
       if (tab.groupId !== chrome.tabGroups.TAB_GROUP_ID_NONE) {
         const group = await chrome.tabGroups.get(tab.groupId);
-        // Reuse a group Zipline made before; leave the user's own groups alone.
-        const ours = group.title?.includes("Zipline") ?? false;
+        // Reuse a group foxpilot made before; leave the user's own groups alone.
+        const ours = group.title?.includes("foxpilot") ?? false;
         return new TabGroupStatus(ours ? tab.groupId : null, tabId, ours);
       }
       // Without windowId the group goes to the caller's window, which fails from a popup.
@@ -40,27 +43,27 @@ export class TabGroupStatus {
   }
 
   running() {
-    return this.set("⚡ Zipline", "cyan");
+    return this.set("⚡ foxpilot", "cyan");
   }
 
   update(view: AgentView) {
     const seconds = `${(view.elapsedMs / 1000).toFixed(1)} s`;
     switch (view.status) {
       case "done":
-        return this.set(`✅ Zipline · ${seconds}`, "green");
+        return this.set(`✅ foxpilot · ${seconds}`, "green");
       case "blocked":
-        return this.set("⛔ Zipline · blocked", "red");
+        return this.set("⛔ foxpilot · blocked", "red");
       case "stopped":
-        return this.set("⏹ Zipline · stopped", "grey");
+        return this.set("⏹ foxpilot · stopped", "grey");
       case "error":
-        return this.set("⚠️ Zipline · error", "red");
+        return this.set("⚠️ foxpilot · error", "red");
       default:
-        return this.set(`⚡ Zipline · step ${view.history.length + 1}`, "cyan");
+        return this.set(`⚡ foxpilot · step ${view.history.length + 1}`, "cyan");
     }
   }
 
   failed() {
-    return this.set("⚠️ Zipline · error", "red");
+    return this.set("⚠️ foxpilot · error", "red");
   }
 
   /** Leave the final status up briefly, then ungroup the tab. */
