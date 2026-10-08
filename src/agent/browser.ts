@@ -1,77 +1,40 @@
-// Port of gliner2-ultrafast browser.py (MIT) onto chrome.debugger: the same
-// Chrome DevTools Protocol calls, sent from the extension to the user's tab.
-// Actions target observed DOM nodes by code-owned ids, never model-written
-// selectors, and are refused if the page moved since the decision.
+// Port of gliner2-ultrafast browser.py (MIT) onto Firefox's scripting API, in
+// place of the Chrome DevTools Protocol calls Zipline made. Actions target
+// observed DOM nodes by code-owned ids, never model-written selectors, and
+// are refused if the page moved since the decision.
+//
+// Everything runs in the extension's isolated world of the tab. Page CSP and
+// Trusted Types do not apply there, page scripts cannot change its globals,
+// and Firefox keeps one isolated world per document, so snapshot.js's
+// window.__glinerFast cache stays between calls.
 import SNAPSHOT from "./snapshot.js";
 import type { Action, Page } from "./types";
 import { SETTLE } from "./settle";
+import { clickAt, fillField, markTarget, pressKey, resolveTarget, scrollAt } from "./actuate";
 
 export class StalePage extends Error {}
 
 const MARKER = `(() => { const state=${SNAPSHOT}; return state?.marker ?? null; })()`;
-const isMac = typeof navigator !== "undefined" && /Mac/.test(navigator.platform);
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** Resolves the target node, checks it is visible, enabled and not covered, and returns its centre. */
-const TARGET = `(action => {
-  const e=window.__glinerFast?.nodes.get(action.node);
-  if (!e?.isConnected || e.matches(':disabled') || e.closest('[aria-disabled="true"],[inert]') ||
-      !e.checkVisibility({checkOpacity:true,checkVisibilityCSS:true})) return null;
-  if (action.kind==='fill' && (e.readOnly || e.getAttribute('aria-readonly')==='true')) return null;
-  const r=e.getBoundingClientRect(), x=r.x+r.width/2, y=r.y+r.height/2;
-  if (!r.width || !r.height || x<0 || y<0 || x>=innerWidth || y>=innerHeight) return null;
-  let hit=document.elementFromPoint(x,y);
-  while (hit?.shadowRoot) { const inner=hit.shadowRoot.elementFromPoint(x,y); if (!inner || inner===hit) break; hit=inner; }
-  const path=[]; for (let n=hit; n; n=n.parentElement||n.parentNode?.host) path.push(n);
-  if (!path.includes(e)) return null;
-  if (action.kind==='select') {
-    if (e.tagName!=='SELECT' || ![...e.options].some(o=>o.value===action.value && !o.disabled && !o.closest('optgroup[disabled]'))) return null;
-    e.value=action.value;
-    e.dispatchEvent(new Event('input',{bubbles:true}));
-    e.dispatchEvent(new Event('change',{bubbles:true}));
-  }
-  return {x,y,rect:{left:r.left,top:r.top,width:r.width,height:r.height}};
-})`;
-
 /**
- * Shows what Zipline is about to touch: a ring around the element, a label
- * for the action and a ripple at the click point. Drawn in a shadow root with
- * pointer-events off, so it never intercepts input or reads as a control.
+ * A function whose source is `expression`. Firefox injects `func.toString()`,
+ * so text modules (snapshot.js, SETTLE) run as injected code, not through the
+ * page's eval, which strict CSP blocks.
  */
-const MARK = (target: { x: number; y: number; rect: { left: number; top: number; width: number; height: number } }, label: string) => `((t, label) => {
-  document.getElementById('zipline-action')?.remove();
-  const host = document.createElement('div');
-  host.id = 'zipline-action';
-  host.style.cssText = 'position:fixed;inset:0;z-index:2147483647;pointer-events:none';
-  const root = host.attachShadow({ mode: 'open' });
-  // Built without innerHTML: pages that enforce Trusted Types (Google Flights)
-  // reject HTML strings, and a constructed stylesheet is not blocked by CSP.
-  const sheet = new CSSStyleSheet();
-  sheet.replaceSync('.ring{position:fixed;border-radius:10px;outline:3px solid #2cc4ad;outline-offset:4px;background:rgba(44,196,173,.12);box-shadow:0 0 24px 4px rgba(44,196,173,.55);animation:in .18s ease-out}' +
-    '.tag{position:fixed;transform:translateY(-100%);margin-top:-10px;padding:3px 9px;border-radius:999px;background:#0f9d8a;color:#fff;' +
-    'font:600 12px/1.4 system-ui,-apple-system,sans-serif;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.35);max-width:420px;overflow:hidden;text-overflow:ellipsis}' +
-    '.dot{position:fixed;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;background:rgba(183,227,77,.9);animation:ripple .6s ease-out forwards}' +
-    '@keyframes in{from{opacity:0;transform:scale(1.06)}}' +
-    '@keyframes ripple{to{transform:scale(3.2);opacity:0}}' +
-    '.fade{transition:opacity .35s ease;opacity:0}');
-  root.adoptedStyleSheets = [sheet];
-  for (const name of ['ring', 'tag', 'dot']) { const el = document.createElement('div'); el.className = name; root.append(el); }
-  const ring = root.querySelector('.ring'), tag = root.querySelector('.tag'), dot = root.querySelector('.dot');
-  Object.assign(ring.style, { left: t.rect.left + 'px', top: t.rect.top + 'px', width: t.rect.width + 'px', height: t.rect.height + 'px' });
-  Object.assign(tag.style, { left: t.rect.left + 'px', top: t.rect.top + 'px' });
-  Object.assign(dot.style, { left: t.x + 'px', top: t.y + 'px' });
-  tag.textContent = '⚡ ' + label;
-  document.documentElement.append(host);
-  setTimeout(() => root.querySelectorAll('.ring,.tag').forEach(e => e.classList.add('fade')), 650);
-  setTimeout(() => host.remove(), 1100);
-  return true;
-})(${JSON.stringify(target)}, ${JSON.stringify(label)})`;
+function source(expression: string): () => unknown {
+  const func = () => undefined;
+  func.toString = () => `() => (${expression})`;
+  return func;
+}
 
 function actionLabel(action: Action, text?: string | null): string {
   if (action.kind === "fill") return `type "${(text ?? "").slice(0, 40)}"`;
   if (action.kind === "select") return `select ${action.label.split(" → ").pop()}`;
   return "click";
 }
+
+type FrameEvent = { tabId: number; frameId: number };
 
 export class TabBrowser {
   private afterInput: Action | null = null;
@@ -83,47 +46,38 @@ export class TabBrowser {
   /** Main-frame loads started since attaching, and whether one is in progress. */
   navigations = 0;
   loading = false;
-  private mainFrame: string | null = null;
-  private listener = (source: chrome.debugger.Debuggee, method: string, params?: object) => {
-    if (source.tabId !== this.tabId) return;
-    const frameId = (params as { frameId?: string; frame?: { id: string; parentId?: string } } | undefined)?.frameId
-      ?? (params as { frame?: { id: string } } | undefined)?.frame?.id;
-    if (method === "Page.frameNavigated") {
-      const frame = (params as { frame: { id: string; parentId?: string } }).frame;
-      if (!frame.parentId) this.mainFrame = frame.id;
-      return;
-    }
-    if (frameId == null || (this.mainFrame != null && frameId !== this.mainFrame)) return;
-    if (method === "Page.frameStartedLoading") {
-      this.navigations++;
-      this.loading = true;
-    } else if (method === "Page.frameStoppedLoading") {
-      this.loading = false;
-    }
+  private started = ({ tabId, frameId }: FrameEvent) => {
+    if (tabId !== this.tabId || frameId !== 0) return;
+    this.navigations++;
+    this.loading = true;
+  };
+  private stopped = ({ tabId, frameId }: FrameEvent) => {
+    if (tabId === this.tabId && frameId === 0) this.loading = false;
   };
 
   static async attach(tabId: number): Promise<TabBrowser> {
-    await chrome.debugger.attach({ tabId }, "1.3");
     const browser = new TabBrowser(tabId);
-    // Keep menus and animations rendering while focus is in the side panel.
-    await browser.call("Emulation.setFocusEmulationEnabled", { enabled: true });
-    // Page events tell a search that navigates (Amazon) from one that updates in place.
-    chrome.debugger.onEvent.addListener(browser.listener);
-    await browser.call("Page.enable");
-    const tree = await browser.call<{ frameTree: { frame: { id: string } } }>("Page.getFrameTree");
-    browser.mainFrame = tree.frameTree.frame.id;
+    // Fails here, not mid-run, on pages extensions may not script (about:, addons.mozilla.org).
+    await browser.run(() => true).catch((error: Error) => {
+      throw new Error(`Cannot access this page (${error.message})`);
+    });
+    // Load events tell a search that navigates (Amazon) from one that updates in place.
+    chrome.webNavigation.onBeforeNavigate.addListener(browser.started);
+    chrome.webNavigation.onCompleted.addListener(browser.stopped);
+    chrome.webNavigation.onErrorOccurred.addListener(browser.stopped);
     return browser;
   }
 
   async detach(): Promise<void> {
-    chrome.debugger.onEvent.removeListener(this.listener);
-    await chrome.debugger.detach({ tabId: this.tabId }).catch(() => {});
+    chrome.webNavigation.onBeforeNavigate.removeListener(this.started);
+    chrome.webNavigation.onCompleted.removeListener(this.stopped);
+    chrome.webNavigation.onErrorOccurred.removeListener(this.stopped);
   }
 
-  /** Loads a URL in the tab and waits for it (the extension has no "tabs" permission to read or set URLs). */
+  /** Loads a URL in the tab and waits for it. */
   async navigate(url: string, maxMs = 15_000): Promise<void> {
     const since = this.navigations;
-    await this.call("Page.navigate", { url });
+    await chrome.tabs.update(this.tabId, { url });
     await this.settleNavigation(since, 2000, maxMs);
   }
 
@@ -140,28 +94,30 @@ export class TabBrowser {
     return true;
   }
 
-  call<T = unknown>(method: string, params: Record<string, unknown> = {}): Promise<T> {
-    return chrome.debugger.sendCommand({ tabId: this.tabId }, method, params) as Promise<T>;
+  /** Runs `func` in the tab's top frame with JSON `args`; a promise it returns is awaited. */
+  private async run<A extends unknown[], T>(func: (...args: A) => T, ...args: A): Promise<Awaited<T>> {
+    let results: { result?: unknown; error?: unknown }[];
+    try {
+      results = await chrome.scripting.executeScript({ target: { tabId: this.tabId }, world: "ISOLATED", injectImmediately: true, func, args });
+    } catch (error) {
+      // Usually the document navigated mid-evaluation; keep the browser's own message for the rest.
+      throw new StalePage(`Document changed during evaluation (${error instanceof Error ? error.message : String(error)})`);
+    }
+    const [first] = results;
+    if (!first || first.error) throw new StalePage(`Document changed during evaluation${first?.error ? ` (${String(first.error)})` : ""}`);
+    return first.result as Awaited<T>;
   }
 
-  async evaluate<T = unknown>(expression: string, awaitPromise = false): Promise<T> {
-    const response = await this.call<{
-      result?: { value?: T };
-      exceptionDetails?: { text?: string; exception?: { description?: string } };
-    }>("Runtime.evaluate", { expression, returnByValue: true, awaitPromise });
-    if (response.exceptionDetails) {
-      // Usually the document navigated mid-evaluation; keep the page's own message for the rest.
-      const detail = response.exceptionDetails.exception?.description?.split("\n")[0] ?? response.exceptionDetails.text;
-      throw new StalePage(`Document changed during evaluation${detail ? ` (${detail})` : ""}`);
-    }
-    return response.result?.value as T;
+  /** Evaluates a JavaScript expression in the tab; a promise it gives is awaited. */
+  async evaluate<T = unknown>(expression: string): Promise<T> {
+    return (await this.run(source(expression))) as T;
   }
 
   async waitForLoad(timeoutMs = 15_000): Promise<void> {
     const deadline = performance.now() + timeoutMs;
     while (performance.now() < deadline) {
       try {
-        if ((await this.evaluate("document.readyState")) === "complete") return;
+        if ((await this.run(() => document.readyState)) === "complete") return;
       } catch {
         // navigating
       }
@@ -174,7 +130,7 @@ export class TabBrowser {
       const action = this.afterInput;
       this.afterInput = null;
       try {
-        await this.evaluate(`${SETTLE}(${JSON.stringify(action)})`, true);
+        await this.evaluate(`${SETTLE}(${JSON.stringify(action)})`);
       } catch {
         // navigation interrupted the wait; observe anyway
       }
@@ -196,11 +152,12 @@ export class TabBrowser {
   async fresh(page: Page, action?: Action): Promise<boolean> {
     if (action && (action.kind === "click" || action.kind === "select")) {
       if (typeof action.node !== "number") return false;
-      const current = await this.evaluate<[unknown[], unknown] | null>(
-        `(() => { const c=window.__glinerFast; return c ? [c.pageKey(),c.guard(c.nodes.get(${action.node}))] : null; })()`,
-      );
+      const current = await this.run((node: number) => {
+        const c = window.__glinerFast;
+        return c ? [c.pageKey(), c.guard(c.nodes.get(node))] : null;
+      }, action.node);
       if (!current || !sameValue(current[1], page.guards[String(action.node)])) return false;
-      return unchanged(page.page_key, current[0]);
+      return unchanged(page.page_key, current[0] as unknown[]);
     }
     return sameValue(await this.evaluate(MARKER), page.marker);
   }
@@ -215,41 +172,31 @@ export class TabBrowser {
     if (kind === "wait") {
       await sleep(600);
     } else if (kind === "scroll") {
-      await this.call("Input.dispatchMouseEvent", { type: "mouseWheel", x: 550, y: 650, deltaX: 0, deltaY: action.delta });
+      await this.run(scrollAt, action.delta ?? 0);
     } else if (kind === "key") {
-      for (const [type, extra] of [["rawKeyDown", {}], ["char", { text: "\r" }], ["keyUp", {}]] as const) {
-        await this.call("Input.dispatchKeyEvent", {
-          type, key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13, ...extra,
-        });
-      }
+      await this.run(pressKey, "Enter");
     } else {
       if (typeof action.node !== "number") throw new Error("Invalid observed node");
       if (action.offscreen) {
-        await this.evaluate(
-          `(action => { const e=window.__glinerFast?.nodes.get(action.node); if (e) e.scrollIntoView({block:'center', inline:'center'}); return true; })(${JSON.stringify(action)})`,
-        );
+        await this.run((node: number) => {
+          window.__glinerFast?.nodes.get(node)?.scrollIntoView({ block: "center", inline: "center" });
+          return true;
+        }, action.node);
         await sleep(50);
       }
-      const target = await this.evaluate<{ x: number; y: number; rect: { left: number; top: number; width: number; height: number } } | null>(
-        `${TARGET}(${JSON.stringify(action)})`,
-      );
+      const target = await this.run(resolveTarget, action);
       if (!target) {
         if (kind === "select") throw new Error("Dropdown execution was not confirmed; inspect before retrying.");
         throw new StalePage("Target changed or is covered. Observe again.");
       }
       if (this.showActions) {
-        await this.evaluate(MARK(target, actionLabel(action, text))).catch(() => {});
+        await this.run(markTarget, target, actionLabel(action, text)).catch(() => {});
         await sleep(120);
       }
       if (kind !== "select") {
-        for (const type of ["mousePressed", "mouseReleased"]) {
-          await this.call("Input.dispatchMouseEvent", { type, x: target.x, y: target.y, button: "left", clickCount: 1 });
-        }
-        if (kind === "fill") {
-          const modifiers = isMac ? 4 : 2;
-          await this.call("Input.dispatchKeyEvent", { type: "keyDown", key: "a", code: "KeyA", modifiers, commands: ["selectAll"] });
-          await this.call("Input.dispatchKeyEvent", { type: "keyUp", key: "a", code: "KeyA", modifiers });
-          await this.call("Input.insertText", { text: text ?? "" });
+        await this.run(clickAt, target.x, target.y);
+        if (kind === "fill" && (await this.run(fillField, action.node, text ?? "")) == null) {
+          throw new StalePage("Field went away before typing. Observe again.");
         }
       }
     }
