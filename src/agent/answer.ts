@@ -8,7 +8,8 @@ import type { Scorer } from "./controller";
 import { choose, describe, parseClock, parseDuration, parseMoney, qualifiers, type Row } from "./pick";
 import { searchQuery } from "./search";
 
-export type Answer = { text: string; score: number; label?: string };
+/** `slots`: the values a report clause asked for, by slot (report.ts). */
+export type Answer = { text: string; score: number; label?: string; slots?: Record<string, string> };
 
 const MAX_CANDIDATES = 24;
 
