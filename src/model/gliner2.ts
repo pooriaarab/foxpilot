@@ -29,10 +29,26 @@ export type Encoded = {
 
 export type EncodeTask = { name: string; marker: "[E]" | "[L]"; labels: Labels };
 
+/** One GLiNER2 call as training data, and the decision it fed once the controller has chosen. */
+export type ModelCall = {
+  kind: "classify" | "extractEntities";
+  text: string;
+  /** The classification prompt, or "entities". */
+  name: string;
+  labels: Labels;
+  /** Label probabilities for classify; the spans found for extractEntities. */
+  output: Record<string, number> | Record<string, Entity[]>;
+  ms: number;
+  decision?: { step: number; choice: string; operation: string; target: string | null; requirement: string | null };
+};
+
 type Output = "cls_logits" | "count_logits" | "span_logits";
 type Read = { data: number[]; dims: number[] };
 
 export class Gliner2 {
+  /** When set, every call is appended here. Null (the default) costs one check per call. */
+  recorder: ModelCall[] | null = null;
+
   private constructor(
     private readonly model: PreTrainedModel,
     private readonly tokenizer: PreTrainedTokenizer,
@@ -148,23 +164,31 @@ export class Gliner2 {
 
   /** Softmax over the labels, like ClassificationSchema().single(..., activation="softmax"). */
   async classify(text: string, name: string, labels: Labels): Promise<Record<string, number>> {
+    const started = this.recorder ? performance.now() : 0;
     const encoded = this.encode(text, { name, marker: "[L]", labels });
     const cls = (await this.run(encoded, ["cls_logits"])).cls_logits.data;
     const max = Math.max(...cls);
     const exp = cls.map((x) => Math.exp(x - max));
     const sum = exp.reduce((a, b) => a + b, 0);
-    return Object.fromEntries(Object.keys(labels).map((label, i) => [label, exp[i]! / sum]));
+    const probabilities = Object.fromEntries(Object.keys(labels).map((label, i) => [label, exp[i]! / sum]));
+    this.recorder?.push({ kind: "classify", text, name, labels, output: probabilities, ms: Math.round(performance.now() - started) });
+    return probabilities;
   }
 
   /** extract_entities(text, types) with include_confidence and include_spans. */
   async extractEntities(text: string, types: Labels, threshold = 0.5): Promise<Record<string, Entity[]>> {
+    const started = this.recorder ? performance.now() : 0;
     const encoded = this.encode(text, { name: "entities", marker: "[E]", labels: types });
     const read = await this.run(encoded, ["count_logits", "span_logits"]);
     const count = read.count_logits.data;
     const span = read.span_logits.data;
     const names = Object.keys(types);
     const result: Record<string, Entity[]> = Object.fromEntries(names.map((name) => [name, []]));
-    if (argmax(count) <= 0) return result;
+    const recorded = () => this.recorder?.push({ kind: "extractEntities", text, name: "entities", labels: types, output: result, ms: Math.round(performance.now() - started) });
+    if (argmax(count) <= 0) {
+      recorded();
+      return result;
+    }
 
     const [, , words, width] = read.span_logits.dims as [number, number, number, number];
     names.forEach((name, li) => {
@@ -183,6 +207,7 @@ export class Gliner2 {
       }
       result[name] = finalizeSpans(raw);
     });
+    recorded();
     return result;
   }
 }

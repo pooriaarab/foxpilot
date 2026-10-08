@@ -5,7 +5,7 @@
 //   const session = await launch({ headless });  // Firefox, extension, panel window
 //   const tabId = await session.openTask(url);    // loads url in the task tab
 //   const { modelLoadMs } = await session.ready(); // waits for GLiNER2
-//   const result = await session.run(goal, { tabId, llm }); // RunResult, src/panel/sidepanel.ts
+//   const result = await session.run(goal, { tabId, llm, record }); // RunResult, src/panel/sidepanel.ts
 //   const page = await session.snapshot(tabId);   // {url, title, controls}: what the agent sees
 //   await session.screenshot(path);                // the task tab
 //   await session.states();                        // its tabs, radios and toggles: [label, checked, selected, pressed]
@@ -122,9 +122,9 @@ function session(browser, task, panel, close) {
       return tabId;
     },
     ready: () => panel.evaluate(() => window.foxpilot.ready()),
-    async run(goal, { tabId: tab, llm = false }) {
+    async run(goal, { tabId: tab, llm = false, record = false }) {
       const id = (await panel.evaluate(() => window.foxpilot.last()?.id ?? 0)) + 1;
-      return panel.evaluate((o) => window.foxpilot.run(o), { goal, tabId: tab, llm }).catch(async (error) => {
+      return panel.evaluate((o) => window.foxpilot.run(o), { goal, tabId: tab, llm, record }).catch(async (error) => {
         // BiDi can drop a long call; the panel keeps the result.
         console.error("run call dropped, polling:", error.message);
         await poll(panel, (n) => window.foxpilot.last()?.id === n, id, LONG_MS);
