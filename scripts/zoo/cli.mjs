@@ -1,11 +1,14 @@
 // Runs foxpilot over the zoo-sites eval and writes docs/benchmarks/zoo-sites.md
 // and zoo-sites.json. zoo-sites' validators grade each attempt (scripts/zoo/zoo.mjs).
 // Usage: pnpm eval --zoo <zoo-sites checkout> [--tasks a,b]
-//        [--repeat N] [--limit N] [--extractor] [--llm] [--seed S] [--out DIR] [--dry-run]
+//        [--repeat N] [--limit N] [--extractor] [--llm] [--seed S] [--out DIR] [--trace] [--dry-run]
+// --trace writes <out>/traces/<task>-r<rep>.json (goal, verdict, full RunResult)
+// and <task>-r<rep>.png (the final page) for each attempt.
 // --extractor turns on zoo-sites' answer extractor, a paid model call per
 // graded answer (claude-haiku-4-5 by default; EVAL_EXTRACTOR=codex selects Codex).
 // --dry-run lists the task inventory and starts no Firefox.
 import { execFileSync } from "node:child_process";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { grade, inventory, openZoo, resetFor } from "./zoo.mjs";
@@ -19,7 +22,7 @@ const flag = (name) => {
 };
 const zooPath = flag("--zoo");
 if (!zooPath) {
-  console.error("Usage: node scripts/zoo/cli.mjs --zoo <zoo-sites checkout> [--tasks a,b] [--repeat N] [--limit N] [--extractor] [--llm] [--dry-run]");
+  console.error("Usage: node scripts/zoo/cli.mjs --zoo <zoo-sites checkout> [--tasks a,b] [--repeat N] [--limit N] [--extractor] [--llm] [--trace] [--dry-run]");
   process.exit(2);
 }
 const only = flag("--tasks")?.split(",").filter(Boolean) ?? null;
@@ -27,6 +30,7 @@ const repeat = Number(flag("--repeat") ?? 1);
 const limit = flag("--limit") === null ? Infinity : Number(flag("--limit"));
 const extractor = args.includes("--extractor");
 const llm = args.includes("--llm");
+const trace = args.includes("--trace");
 const outDir = flag("--out") ?? join(root, "docs", "benchmarks");
 
 const zoo = await openZoo(zooPath, { seed: flag("--seed") });
@@ -67,6 +71,11 @@ try {
         error = String(e?.message ?? e);
       }
       const wallMs = Date.now() - started;
+      const tracePath = trace ? join(outDir, "traces", `${entry.id}-r${rep}`) : null;
+      if (tracePath) {
+        mkdirSync(dirname(tracePath), { recursive: true });
+        await session.screenshot(`${tracePath}.png`).catch(() => {});
+      }
       const verdict = await grade(zoo, entry, { answer: result?.answer?.text ?? null, extractor });
       const row = {
         id: entry.id,
@@ -89,6 +98,10 @@ try {
         ...(error ? { error } : {}),
       };
       rows.push(row);
+      if (tracePath) {
+        const verdictOut = { status: row.status, detail: verdict.detail, fields: verdict.fields };
+        writeFileSync(`${tracePath}.json`, JSON.stringify({ id: entry.id, rep, goal: entry.goal, url: entry.url, verdict: verdictOut, runResult: result, ...(error ? { error } : {}) }, null, 2));
+      }
       console.log(`${row.status.toUpperCase()}  ${entry.id} r${rep}  ${wallMs} ms  ${row.error ?? row.detail ?? ""}`);
     }
   }
