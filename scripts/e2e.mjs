@@ -86,17 +86,34 @@ try {
   await page.goto(url, { waitUntil: "domcontentloaded" }).catch((e) => console.log("goto:", e.message));
   await sleep(2500);
 
-  // The panel is a normal tab here. It looks the task tab up by URL, then reloads itself with ?tab=<id>.
+  // The real sidebar cannot be opened over BiDi (it needs a user gesture). A popup
+  // window is the closest match: the panel is visible, so its timers run at full
+  // speed, and focus sits outside the task page, as it does in the sidebar.
   const panelUrl = `moz-extension://${UUID}/sidepanel.html`;
-  const panel = await browser.newPage();
-  panel.on("console", (m) => { if (m.type() === "error") console.log("[panel]", m.text()); });
-  await openExtensionPage(panel, panelUrl);
-  const tabId = await panel.evaluate(async () => {
+  const opener = await browser.newPage();
+  await openExtensionPage(opener, panelUrl);
+  const tabId = await opener.evaluate(async () => {
     const tabs = await chrome.tabs.query({});
     return tabs.find((t) => t.url && !t.url.startsWith("moz-extension:") && !t.url.startsWith("about:"))?.id;
   });
   if (!tabId) throw new Error("Cannot find the task tab from the panel.");
-  await openExtensionPage(panel, `${panelUrl}?tab=${tabId}`);
+  const target = `${panelUrl}?tab=${tabId}`;
+  // Side by side, task page left and panel right, so a run is easy to watch and record.
+  await opener.evaluate(async ({ id, u }) => {
+    const { windowId } = await chrome.tabs.get(id);
+    await chrome.windows.update(windowId, { left: 0, top: 0, width: 1280, height: 1080, state: "normal" });
+    await chrome.windows.create({ url: u, type: "popup", left: 1284, top: 0, width: 440, height: 1080, focused: true });
+  }, { id: tabId, u: target });
+  let panel = null;
+  for (const deadline = Date.now() + 30_000; !panel && Date.now() < deadline; await sleep(250)) {
+    for (const p of await browser.pages()) {
+      if (p !== opener && (await p.evaluate(() => location.href).catch(() => null)) === target) panel = p;
+    }
+  }
+  if (!panel) throw new Error("The panel window did not open.");
+  await opener.close();
+  panel.on("console", (m) => { if (m.type() === "error") console.log("[panel]", m.text()); });
+  await poll(panel, (u) => location.href === u && document.readyState === "complete", target, 30_000);
 
   await poll(panel, () => /Ready|Failed/.test(document.getElementById("gliner-status")?.textContent ?? ""), undefined, 600_000);
   const glinerStatus = await panel.$eval("#gliner-status", (e) => e.textContent ?? "");
@@ -118,7 +135,6 @@ try {
       for (const m of list) for (const n of m.addedNodes) if (n.nodeName === "LI") window.__e2eSteps.push({ at: performance.now(), el: n });
     }).observe(document.getElementById("steps"), { childList: true });
   });
-  await page.bringToFront();
   await panel.$eval("#goal", (e, g) => { e.value = g; e.dispatchEvent(new Event("input", { bubbles: true })); }, goal);
   const runAt = Date.now();
   await panel.evaluate(() => { window.__e2eRun = performance.now(); });
