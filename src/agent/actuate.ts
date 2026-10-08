@@ -10,7 +10,13 @@ type Acted = { kind: string; node?: number; value?: string };
 
 declare global {
   interface Window {
-    __glinerFast?: { nodes: Map<number, HTMLElement>; pageKey(): unknown[]; guard(e?: Element): unknown };
+    __glinerFast?: {
+      nodes: Map<number, HTMLElement>;
+      /** The element a run is limited to. The context menu sets it; the panel clears it after the run. */
+      scope?: Element | null;
+      pageKey(): unknown[];
+      guard(e?: Element): unknown;
+    };
     __focusBeforeClick?: Element | null;
   }
 }

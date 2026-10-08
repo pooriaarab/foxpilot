@@ -367,6 +367,8 @@ async function run() {
     status.finish();
     window.clearInterval(clock);
     running = null;
+    // A context-menu scope covers one run only.
+    await browser?.evaluate(() => { if (window.__glinerFast) window.__glinerFast.scope = null; }).catch(() => {});
     await browser?.detach();
     runButton.textContent = "Run";
     runButton.classList.remove("stop");
