@@ -38,13 +38,20 @@ export class Gliner2 {
 
   static async load(
     modelId: string,
-    options: { device?: Device; dtype?: Dtype; progress_callback?: (info: unknown) => void } = {},
+    options: {
+      device?: Device;
+      dtype?: Dtype;
+      progress_callback?: (info: unknown) => void;
+      /** ONNX Runtime session options; bench/bench.ts uses them. */
+      session_options?: Record<string, unknown>;
+    } = {},
   ): Promise<Gliner2> {
     const tokenizer = await AutoTokenizer.from_pretrained(modelId);
     const model = await AutoModel.from_pretrained(modelId, {
       device: options.device ?? "webgpu",
       dtype: options.dtype ?? "fp16",
       progress_callback: options.progress_callback,
+      session_options: options.session_options,
     });
     // Added tokens encode to exactly one id.
     const ids = Object.fromEntries(
