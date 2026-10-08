@@ -187,7 +187,10 @@ export function snapshot() {
   const omitted_actions=Math.max(0,actions.length-250);
   actions.splice(250);
   actions.forEach((a,i)=>a.id='e'+(i+1));
-  if (scrollY+innerHeight<height-2) actions.push({id:'scroll_down',kind:'scroll',label:'Scroll down',delta:560});
+  // A dialog that scrolls inside itself hides its last buttons (Save, Next) below its edge.
+  const dialogRoom=deep(document,'dialog,[role="dialog"],[aria-modal="true"]')
+    .some(d=>visible(d) && d.scrollTop+d.clientHeight<d.scrollHeight-1 && /auto|scroll/.test(getComputedStyle(d).overflowY));
+  if (scrollY+innerHeight<height-2 || dialogRoom) actions.push({id:'scroll_down',kind:'scroll',label:'Scroll down',delta:560});
   if (scrollY>0) actions.push({id:'scroll_up',kind:'scroll',label:'Scroll up',delta:-560});
   // Plenty of search boxes have no button at all and submit on Enter alone.
   actions.push({id:'press_enter',kind:'key',label:'Press Enter to submit the focused field'});
