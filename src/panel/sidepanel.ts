@@ -386,7 +386,7 @@ function runLog(): string {
   const start = (window as unknown as { __ziplinePage?: { url: string; title: string } | null }).__ziplinePage;
   if (!view) return "No run yet.";
   const lines = [
-    `Zipline run · ${new Date().toISOString()}`,
+    `foxpilot run · ${new Date().toISOString()}`,
     `Goal: ${view.goal}`,
     ...(site ? [`Site: ${site.host} (${site.opened ? "opened first" : "already there"})`] : []),
     ...(start ? [`Start page: ${start.title} · ${start.url.slice(0, 120)}`] : []),
