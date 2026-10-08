@@ -45,6 +45,9 @@ export type HistoryEntry = {
   form?: number | null;
   submit?: boolean;
   committed_field?: string | null;
+  /** The node of that field, and the value it showed right after the commit. */
+  committed_node?: number | null;
+  committed_value?: string | null;
   text?: string | null;
   [key: string]: unknown;
 };

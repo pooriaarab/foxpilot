@@ -49,14 +49,9 @@ export type AgentView = {
 
 export type SpansFound = Map<string, string>;
 
-/** The form of the most recent field a value was typed into. */
-function committed(history: HistoryEntry[]) {
-  return [...history].reverse().find((h) => h.kind === "fill")?.form ?? null;
-}
-
-/** The name of the most recent field a value was typed into. */
-function filledLabel(history: HistoryEntry[]) {
-  return [...history].reverse().find((h) => h.kind === "fill")?.action ?? null;
+/** The most recent field a value was typed into. */
+function lastFill(history: HistoryEntry[]) {
+  return [...history].reverse().find((h) => h.kind === "fill") ?? null;
 }
 
 /** The page's controls by kind and label, ignoring text and geometry. */
@@ -304,10 +299,11 @@ export class Agent {
       kind: action.kind,
       // A suggestion sits in its own popup form; what it commits is the form of
       // the field that was just typed into.
-      form: action.kind === "key" ? committed(history) : (action.form ?? null),
+      form: action.kind === "key" ? (lastFill(history)?.form ?? null) : (action.form ?? null),
       submit: Boolean(action.submit || action.kind === "key"),
       // Taking a suggestion commits the field it completes, not the form around it.
-      committed_field: decision.commits ? filledLabel(history) : null,
+      committed_field: decision.commits ? (lastFill(history)?.action ?? null) : null,
+      committed_node: decision.commits ? (lastFill(history)?.node ?? null) : null,
       text,
       operation: decision.operation,
       target: decision.target,
@@ -322,6 +318,12 @@ export class Agent {
     this.emit();
     const observing = performance.now();
     this.page = await this.browser.observe();
+    // What the committed field shows once the suggestion is taken; verify()
+    // trusts this node even if the page renames it later.
+    if (entry.committed_node != null) {
+      entry.committed_value = this.page.actions.find((a) =>
+        a.kind === "fill" && a.node === entry.committed_node && a.document_id === entry.document_id)?.value ?? null;
+    }
     if (this.timing) entry.timing = { ...this.timing, act, observe: Math.round(performance.now() - observing) };
     for (const done of completedDates(this.parts, this.page, history)) this.served.add(done);
     // A control that opened a menu or picker has not answered its requirement yet.
