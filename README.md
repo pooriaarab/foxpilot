@@ -72,7 +72,7 @@ The server writes logs to stderr. Run `node scripts/mcp-smoke.mjs` to test it. T
 ## Limits
 
 - The controller is heuristic, as in the original. "Done" means it found nothing left to do, so check the page.
-- Scores below 0.5 are not acted on. On Google Maps, "Select Walking" scores 0.44 against "Walking 20 min" once a route is shown, so foxpilot skips that step. The Python controller makes the same call.
+- Scores below 0.5 are not acted on. One exception: an unselected tab, radio or toggle that names the part ("Select Walking" and "Walking 20 min") is chosen from 0.3 when it is the top answer. The Python controller skips it.
 - It reads text and ARIA labels, not pixels. It supports common HTML and ARIA controls.
 - It works in English and in other languages that the multilingual model covers for extraction. Date parsing understands English month names, ISO dates and US numeric dates.
 - In-page events have `isTrusted: false`. A site that checks for trusted input may ignore a click.
