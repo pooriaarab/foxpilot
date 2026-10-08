@@ -5,6 +5,7 @@ import { Agent, type AgentView, type Refusal, type Status, type Step, type Timin
 import { nameInjected, TabBrowser, type Calls } from "../agent/browser";
 import { clear, findAnswer, lastNote, lastRows, lastScores, type Answer } from "../agent/answer";
 import { LlmWriter, SpanWriter, type FieldWriter } from "../agent/fieldtext";
+import { Reporter } from "../agent/report";
 import { verify, type Check, type Verdict } from "../agent/verify";
 import { onSite, siteIn, withoutSite } from "../agent/site";
 import { Gliner2 } from "../model/gliner2";
@@ -389,6 +390,9 @@ async function run({ goal, tabId, llm: useLlm = false }: RunOptions): Promise<Ru
     const setup = performance.now();
     await browser.evaluate(clear).catch(() => {});
     const model = gliner!;
+    // Reads each page the run visits when the goal asks to report values.
+    const reporter = new Reporter(model, browser, result.goal);
+    reporter.seen(0);
     running = await Agent.create(
       model,
       browser,
@@ -397,6 +401,7 @@ async function run({ goal, tabId, llm: useLlm = false }: RunOptions): Promise<Ru
       (view) => {
         render(view);
         void status.update(view);
+        reporter.seen(view.history.length);
       },
     );
     const loopStart = performance.now();
@@ -417,7 +422,20 @@ async function run({ goal, tabId, llm: useLlm = false }: RunOptions): Promise<Ru
       logged.verdict = verdict;
     }
     const checked = performance.now();
-    if (view.status === "done" && verdict && !verdict.verified) {
+    if (reporter.slots.length) {
+      // Done or not, verified or not: the page's state is graded, so a wrong
+      // verdict must not hide the values the run did reach.
+      $("clock-sub").textContent = "Reading the asked values…";
+      answer = await reporter.report().catch((error) => {
+        console.error("report failed", error);
+        return null;
+      });
+      logged.answer = { answer, scores: [], rows: [] };
+      render(view);
+      if (answer) showAnswer(answer.text, answer.score, answer.label);
+      else showNote(`Nothing on the page gave ${reporter.slots.map((s) => s.phrase).join(", ")}.`);
+      if (verdict) showVerdict(verdict);
+    } else if (view.status === "done" && verdict && !verdict.verified) {
       // Highlighting a "cheapest" row on a page that never reached the goal
       // (the form, a promo) looks like an answer and is not one.
       render(view);
@@ -447,7 +465,7 @@ async function run({ goal, tabId, llm: useLlm = false }: RunOptions): Promise<Ru
       `${secs(loopStart - setup)} reading goal`,
       `${secs(loopEnd - loopStart)} on the page`,
     ];
-    if (view.status === "done") parts.push(`${secs(checked - loopEnd)} checking`, `${secs(performance.now() - checked)} finding answer`);
+    if (view.status === "done" || reporter.slots.length) parts.push(`${secs(checked - loopEnd)} checking`, `${secs(performance.now() - checked)} finding answer`);
     $("elapsed").textContent = secs(performance.now() - started);
     $("clock-sub").textContent = parts.join(" · ");
   } catch (error) {
