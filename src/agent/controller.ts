@@ -211,6 +211,23 @@ export function sends(action: Action): boolean {
  */
 const MENU_FLOOR = 0.4;
 
+/**
+ * Zipline addition: a choice the goal names outright ("Select Walking") also
+ * needs less. Google Maps adds the route time to the travel-mode name once a
+ * route loads, and the score falls from 0.99 for "Walking" to 0.44–0.51 for
+ * "Walking 20 min", either side of the floor; runs below it ended in Best
+ * mode. The control must be the part's top answer, report a state that is off
+ * (aria-checked, aria-selected, aria-pressed), and name the part after its verb.
+ */
+const SETTING_FLOOR = 0.3;
+const LEADING_VERB = new RegExp(`^(?:${VERBS})\\s+`, "i");
+
+function choosesSetting(action: Action, part: string): boolean {
+  const states = [action.selected, action.checked, action.pressed].filter((v) => v != null);
+  return action.kind === "click" && states.length > 0 && !states.includes("true") &&
+    namesValue(action.label, part.replace(LEADING_VERB, ""));
+}
+
 function opensMenu(action: Action): boolean {
   if (action.kind !== "click") return false;
   const popup = String(action.haspopup ?? "").toLowerCase();
@@ -442,6 +459,10 @@ function best(ordered: Map<string, Group>, scores: Scores, parts: Part[]): Chose
       const score = rate(group, scores.get(text));
       if (!score) return;
       if (!valued.has(text) && score >= MENU_FLOOR && opensMenu(execute(group)) && score === top(scores.get(text)!)[1]) {
+        column.set(index, score);
+        return;
+      }
+      if (!valued.has(text) && score >= SETTING_FLOOR && choosesSetting(execute(group), text) && score === top(scores.get(text)!)[1]) {
         column.set(index, score);
         return;
       }

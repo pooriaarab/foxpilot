@@ -280,7 +280,8 @@ export type RunResult = {
   answer: Answer | null;
   checks: Check[];
   steps: RunStep[];
-  decisions: { operation: string; target: string | null; ms?: number; calls?: number }[];
+  /** `top`: each part's two best controls and scores, so a WAIT shows what fell short of the floor. */
+  decisions: { operation: string; target: string | null; confidence: number; top: Record<string, string[]>; ms?: number; calls?: number }[];
   refusals: Refusal[];
   textCalls: AgentView["textCalls"];
   /** Run to answer, in ms. */
@@ -329,7 +330,10 @@ function outcome(view: AgentView, verdict: Verdict | null, answer: Answer | null
       step: h.step, operation: h.operation, action: h.target ?? h.action, text: h.text ?? null,
       ms: h.elapsedMs - (view.history[i - 1]?.elapsedMs ?? 0), timing: h.timing,
     })),
-    decisions: (view.decisions ?? []).map((d) => ({ operation: d.operation, target: d.target, ms: d.ms, calls: d.calls })),
+    decisions: (view.decisions ?? []).map((d) => ({
+      operation: d.operation, target: d.target, confidence: d.confidence, ms: d.ms, calls: d.calls,
+      top: Object.fromEntries(Object.entries(d.rawAnswers).map(([part, p]) => [part, Object.entries(p).slice(0, 2).map(([l, v]) => `${l} ${v.toFixed(2)}`)])),
+    })),
     refusals: view.refusals,
     textCalls: view.textCalls,
   };

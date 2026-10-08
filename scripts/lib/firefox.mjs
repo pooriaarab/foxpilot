@@ -8,6 +8,7 @@
 //   const result = await session.run(goal, { tabId, llm }); // RunResult, src/panel/sidepanel.ts
 //   const page = await session.snapshot(tabId);   // {url, title, controls}: what the agent sees
 //   await session.screenshot(path);                // the task tab
+//   await session.states();                        // its tabs, radios and toggles: [label, checked, selected, pressed]
 //   await session.close();
 //
 // format(result) gives the human-readable lines. preflight() names a missing
@@ -132,6 +133,14 @@ function session(browser, task, panel, close) {
     },
     snapshot: (tab) => panel.evaluate((id) => window.foxpilot.snapshot(id), tab),
     screenshot: (path) => task.screenshot({ path }),
+    // Each visible tab, radio and toggle in the task tab with its aria-checked,
+    // aria-selected and aria-pressed (travel mode on Google Maps).
+    states: () => task.evaluate(() =>
+      [...document.querySelectorAll('[role="radio"],[role="tab"],[aria-pressed],[aria-checked],[aria-selected]')]
+        .filter((e) => e.checkVisibility())
+        .map((e) => [(e.getAttribute("aria-label") || e.textContent || "").replace(/\s+/g, " ").trim().slice(0, 60),
+          ...["aria-checked", "aria-selected", "aria-pressed"].map((a) => e.getAttribute(a))])
+        .filter(([label, ...state]) => label && state.some((v) => v != null))),
     close,
   };
 }
