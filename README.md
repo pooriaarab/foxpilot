@@ -39,8 +39,7 @@ Chrome shows a "started debugging this browser" bar while Zipline drives a tab; 
 - `tests/parity.test.ts`: the JavaScript GLiNER2 runtime reproduces the Python library's token ids and outputs on 14 recorded calls (fp32 and fp16).
 - `tests/verify.test.ts`: the goal check passes a sent, complete form and fails a Round-trip form beside "One way trip from New York…" cards, a form never sent and a captcha page.
 - `tests/controller.test.ts`: the TypeScript controller makes the same decisions as the Python controller on captured Google Flights and Maps pages (`tests/oracle.py` produces the reference).
-- `scripts/e2e.mjs [flights|maps|walking] [--llm]`: runs a task end to end in Playwright's Chromium.
-- `scripts/record-demo.mjs`: records the page and the panel side by side in real time.
+- `scripts/e2e.mjs [flights|maps|walking] [--llm]`: runs a task end to end in Firefox (`pnpm e2e`).
 
 ## Limits
 
