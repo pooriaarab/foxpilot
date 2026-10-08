@@ -75,7 +75,15 @@ export function clickAt(x: number, y: number): boolean {
  * tracker, so React still sees a change on the input event.
  */
 export function fillField(node: number, text: string): string | null {
-  const field = window.__glinerFast?.nodes.get(node);
+  // Type where focus is, as CDP Input.insertText did: clicking a field often
+  // moves focus to a new input (an overlay or combobox). If the click focused
+  // nothing editable, type into the observed field.
+  let active: Element | null = document.activeElement;
+  while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+  const editable = (e: Element | null): e is HTMLElement =>
+    e instanceof HTMLTextAreaElement || (e instanceof HTMLElement && e.isContentEditable) ||
+    (e instanceof HTMLInputElement && /^(text|search|email|url|tel|number|password|)$/.test(e.type));
+  const field = editable(active) ? active : window.__glinerFast?.nodes.get(node);
   if (!field?.isConnected) return null;
   const plain = field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement;
   const read = () => (plain ? field.value : field.textContent ?? "");
