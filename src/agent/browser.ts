@@ -45,9 +45,9 @@ export class TabBrowser {
 
   static async attach(tabId: number): Promise<TabBrowser> {
     const browser = new TabBrowser(tabId);
-    // Fails here, not mid-run, on pages extensions may not script (about:, addons.mozilla.org).
+    // Fails here, not mid-run, when the page cannot be scripted. The panel decides from the URL what to do.
     await browser.evaluate(() => true).catch((error: Error) => {
-      throw new Error(`Cannot access this page (${error.message})`);
+      throw new Error(`Cannot attach to this page: ${error.message}`);
     });
     // Load events tell a search that navigates (Amazon) from one that updates in place.
     chrome.webNavigation.onBeforeNavigate.addListener(browser.started);
