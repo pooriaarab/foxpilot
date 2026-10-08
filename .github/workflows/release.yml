@@ -22,13 +22,24 @@ jobs:
       AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
     steps:
       - uses: actions/checkout@v4
+      - name: Refuse a version that is already released
+        run: |
+          VERSION=$(node -p "require('./public/manifest.json').version")
+          if [ -n "$(git ls-remote --tags origin "refs/tags/v${VERSION}")" ]; then
+            echo "::error::Version ${VERSION} is already released. Bump public/manifest.json version."
+            exit 1
+          fi
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm build
+      # The browser tests drive Chromium through Playwright.
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm ci:local
+      - name: Archive the source for AMO review
+        run: git archive --format=zip -o source.zip HEAD
       - name: Sign with AMO
         run: |
           missing=0
@@ -40,8 +51,9 @@ jobs:
           done
           [ "$missing" -eq 0 ] || exit 1
           pnpm exec web-ext sign -s dist -a web-ext-artifacts/signed --channel=unlisted \
-            --api-key="$AMO_JWT_ISSUER" --api-secret="$AMO_JWT_SECRET"
-      - name: Create or update the GitHub release
+            --api-key="$AMO_JWT_ISSUER" --api-secret="$AMO_JWT_SECRET" \
+            --upload-source-code source.zip
+      - name: Create the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -52,9 +64,5 @@ jobs:
             echo "::error::Signing produced no .xpi file."
             exit 1
           fi
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "${FILES[@]}" --clobber
-          else
-            gh release create "$TAG" "${FILES[@]}" --target "$GITHUB_SHA" \
-              --title "$TAG" --generate-notes
-          fi
+          gh release create "$TAG" "${FILES[@]}" --target "$GITHUB_SHA" \
+            --title "$TAG" --generate-notes
