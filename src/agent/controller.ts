@@ -7,6 +7,7 @@ import { firstDate, resolveDate, sameDate, type IsoDate } from "./dates";
 import type { Action, HistoryEntry, Page } from "./types";
 import { isSearchField } from "./search";
 import { parseAsk, properName } from "./ask";
+import { patience } from "./patience";
 
 export type Labels = Record<string, string | undefined>;
 
@@ -815,9 +816,11 @@ export async function choose(
     covered = [];
     // Termination is heuristic; callers must verify the actual outcome.
     const waited = idle(history);
-    const wait = history.length && waited < 2 ? control(state, "wait") : undefined;
+    const patient = patience(allParts.map((p) => p.text).join(" "), parts.length, state, history, (a) => !isUnsafe(a));
+    const wait = patient?.kind === "wait" || (history.length && waited < 2) ? control(state, "wait") : undefined;
     const scroll = waited < 4 ? control(state, "scroll_down") : undefined;
-    if (wait) [choice, operation, confidence] = [wait.id, "WAIT", 1.0];
+    if (patient?.kind === "retry") [choice, operation, confidence] = [patient.action.id, "CLICK", 1.0];
+    else if (wait) [choice, operation, confidence] = [wait.id, "WAIT", 1.0];
     else if (scroll) [choice, operation, confidence] = [scroll.id, "SCROLL_DOWN", 1.0];
     else {
       const acted = history.some((entry) => entry.kind in OPERATIONS);
