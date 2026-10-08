@@ -1,7 +1,9 @@
 // Runs Foxpilot end to end in Firefox: loads the built extension in a fresh
 // profile, opens a task page, opens the panel as its own tab pointed at that
 // page (?tab=<id>), runs the goal, and writes a JSON record and a screenshot
-// to artifacts/. Exit code 0 only when the panel verifies the goal.
+// to artifacts/. The JSON holds per-step timing, refused decisions and
+// executeScript counts per function. Exit code 0 only when the panel
+// verifies the goal.
 // Usage: pnpm e2e [flights|maps|walking] [--llm] [--headless] [--dry-run]
 // Env: FIREFOX (binary path), GOAL and URL (a custom task).
 import { execFileSync } from "node:child_process";
@@ -156,8 +158,21 @@ try {
   record.verified = await panel.$eval(".verdict", (e) => e.classList.contains("ok")).catch(() => false);
   record.result = await panel.$eval("#result", (e) => e.textContent?.trim() ?? "");
   record.answer = await panel.$eval(".answer", (e) => e.textContent?.trim() ?? "").catch(() => null);
+  // Where the time went, from the agent itself: per action, per decision, per injected function.
+  Object.assign(record, await panel.evaluate(() => {
+    const view = window.__zipline;
+    const round = (calls) => Object.fromEntries(Object.entries(calls ?? {}).map(([name, c]) => [name, { count: c.count, ms: Math.round(c.ms) }]));
+    return {
+      timing: (view?.history ?? []).map((h) => ({ step: h.step, action: h.target ?? h.action, kind: h.kind, textMs: h.textMs, elapsedMs: h.elapsedMs, ...h.timing })),
+      decisions: (view?.decisions ?? []).map((d) => ({ operation: d.operation, target: d.target, ms: d.ms, calls: d.calls })),
+      refusals: view?.refusals ?? [],
+      textCalls: view?.textCalls ?? [],
+      evaluate: round(window.__ziplineCalls),
+    };
+  }));
   for (const s of record.steps) console.log(`  ${String(s.ms).padStart(6)} ms  ${s.action}`);
   for (const c of record.checks) console.log(`  ${c.ok ? "ok " : "BAD"} ${c.text}`);
+  for (const r of record.refusals) console.log(`  refused step ${r.step} ${r.target ?? "-"}: ${r.reason}`);
 } catch (error) {
   failure = error instanceof Error ? error.message : String(error);
   record.error = failure;

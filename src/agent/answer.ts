@@ -3,7 +3,7 @@
 // the answer card vs. questions, links, social posts, ads and page chrome;
 // among the ones that look like answers, a second call asks which one the
 // goal refers to. Nothing is highlighted below 0.5.
-import type { TabBrowser } from "./browser";
+import { nameInjected, type TabBrowser } from "./browser";
 import type { Scorer } from "./controller";
 import { choose, describe, parseClock, parseDuration, parseMoney, qualifiers, type Row } from "./pick";
 import { searchQuery } from "./search";
@@ -319,3 +319,5 @@ export async function findAnswer(browser: TabBrowser, model: Scorer, goal: strin
 export function clear(): void {
   document.getElementById('zipline-answer')?.remove();
 }
+
+nameInjected({ collect, highlight, collectRows, clear });

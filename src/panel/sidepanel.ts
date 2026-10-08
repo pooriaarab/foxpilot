@@ -2,7 +2,7 @@
 // every decision as it happens.
 import { env } from "@huggingface/transformers";
 import { Agent, type AgentView, type Step } from "../agent/agent";
-import { TabBrowser } from "../agent/browser";
+import { nameInjected, TabBrowser } from "../agent/browser";
 import { clear, findAnswer, lastNote, lastRows, lastScores } from "../agent/answer";
 import { LlmWriter, SpanWriter, type FieldWriter } from "../agent/fieldtext";
 import { verify, type Verdict } from "../agent/verify";
@@ -63,6 +63,12 @@ const START_PAGE = "https://www.google.com/";
  */
 const RESTRICTED_URL =
   /^(about:(?!reader)|view-source:|moz-extension:|https:\/\/(accounts-static\.cdn\.mozilla\.net|accounts\.firefox\.com|addons\.cdn\.mozilla\.net|addons\.mozilla\.org|api\.accounts\.firefox\.com|content\.cdn\.mozilla\.net|discovery\.addons\.mozilla\.org|oauth\.accounts\.firefox\.com|profile\.accounts\.firefox\.com|support\.mozilla\.org|sync\.services\.mozilla\.com)(\/|$))/i;
+
+function pageInfo() {
+  return { url: location.href, title: document.title };
+}
+
+nameInjected({ pageInfo });
 
 async function attachOrOpenStart(tabId: number): Promise<TabBrowser> {
   const tab = await chrome.tabs.get(tabId);
@@ -267,7 +273,7 @@ async function run() {
   $("result").hidden = true;
   document.querySelectorAll(".answer, .verdict").forEach((e) => e.remove());
   // The run log reads these; a run that stops before the answer step must not show the last run's.
-  Object.assign(window, { __ziplineAnswer: null, __ziplineVerdict: null });
+  Object.assign(window, { __ziplineAnswer: null, __ziplineVerdict: null, __ziplineCalls: null });
   runButton.textContent = "Stop";
   runButton.classList.add("stop");
   runButton.disabled = false;
@@ -285,9 +291,10 @@ async function run() {
     let task = goal;
     let opened = false;
     browser = await attachOrOpenStart(tabId);
+    Object.assign(window, { __ziplineCalls: browser.calls });
     if (site) {
       // The page's own location, read by a script injected into the tab.
-      const here = await browser.evaluate(() => location.href).catch(() => "");
+      const here = await browser.evaluate(pageInfo).then((p) => p.url, () => "");
       if (!onSite(here, site)) {
         $("clock-sub").textContent = `Opening ${site.host}…`;
         await browser.navigate(site.url);
@@ -310,7 +317,7 @@ async function run() {
       },
     );
     const loopStart = performance.now();
-    const page = await browser.evaluate(() => ({ url: location.href, title: document.title })).catch(() => null);
+    const page = await browser.evaluate(pageInfo).catch(() => null);
     Object.assign(window, { __ziplinePage: page });
     const view = await running.run();
     const loopEnd = performance.now();
@@ -414,6 +421,7 @@ function runLog(): string {
     ),
     "",
     `Text writer calls: ${JSON.stringify(view.textCalls)}`,
+    `Refused decisions: ${JSON.stringify(view.refusals)}`,
     `Verdict: ${JSON.stringify((window as unknown as { __ziplineVerdict?: unknown }).__ziplineVerdict ?? null)}`,
     `Answer step: ${JSON.stringify(answer ?? null).slice(0, 1500)}`,
   ];
