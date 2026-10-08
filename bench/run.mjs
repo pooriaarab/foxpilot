@@ -5,9 +5,12 @@
 //   E2     multi-threaded wasm on a cross-origin isolated page
 //   E3     ONNX Runtime WebGPU session options: outputs on the GPU, graph capture
 //   E4     the same page in Playwright Chromium, as a control
-// Usage: pnpm bench:firefox [--browser chromium]   Env: FIREFOX (binary path).
+//   E6     one run of 4 prompts against 4 single runs, on the batched export (#90)
+// Usage: pnpm bench:firefox [--browser chromium]
+// Env: FIREFOX (binary path); BATCH_MODEL (dir made by export/export_onnx.py and
+// export/convert_fp16.py; default /tmp/fxp-model-batch). Without it the batch runs are skipped.
 import * as esbuild from "esbuild";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { createReadStream, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -19,7 +22,10 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const flag = process.argv.indexOf("--browser");
 const BROWSER = flag > 0 ? process.argv[flag + 1] : "firefox";
 const FIREFOX = process.env.FIREFOX ?? "/Applications/Firefox.app/Contents/MacOS/firefox";
-const RUNS = [
+const BATCH_MODEL = process.env.BATCH_MODEL ?? "/tmp/fxp-model-batch";
+const haveBatch = existsSync(join(BATCH_MODEL, "onnx/model.onnx"));
+if (!haveBatch) console.warn(`No batched model in ${BATCH_MODEL}; the batch runs are skipped.`);
+const ALL_RUNS = [
   { name: "webgpu fp16", q: "device=webgpu&dtype=fp16&tests=shape" },
   { name: "webgpu fp32", q: "device=webgpu&dtype=fp32&tests=shape,sweep,split" },
   { name: "webgpu fp32 gpu-out", q: "device=webgpu&dtype=fp32&session=gpu-out&tests=sweep,split" },
@@ -27,7 +33,10 @@ const RUNS = [
   { name: "wasm fp32", q: "device=wasm&dtype=fp32&tests=shape,sweep" },
   { name: "wasm fp32 isolated 4 threads", q: "device=wasm&dtype=fp32&threads=4&coi=1&tests=sweep" },
   { name: "wasm fp32 isolated max threads", q: "device=wasm&dtype=fp32&threads=max&coi=1&tests=sweep" },
+  { name: "webgpu fp16 batch", q: "device=webgpu&dtype=fp16&model=batch&tests=batch", model: "batch" },
+  { name: "webgpu fp32 batch", q: "device=webgpu&dtype=fp32&model=batch&tests=batch", model: "batch" },
 ];
+const RUNS = ALL_RUNS.filter((r) => haveBatch || !r.model);
 if (BROWSER !== "firefox" && BROWSER !== "chromium") {
   console.error(`--browser must be firefox or chromium, not ${BROWSER}.`);
   process.exit(2);
@@ -65,6 +74,12 @@ for (const f of readdirSync(ortDist)) {
 const ISOLATE = { "cross-origin-opener-policy": "same-origin", "cross-origin-embedder-policy": "require-corp" };
 const server = createServer((req, res) => {
   const url = new URL(req.url, "http://x");
+  if (url.pathname.startsWith("/models/batch/") && haveBatch) {
+    const file = join(BATCH_MODEL, url.pathname.slice("/models/batch/".length));
+    if (!file.startsWith(BATCH_MODEL) || !existsSync(file) || !statSync(file).isFile()) return void res.writeHead(404).end();
+    res.writeHead(200, { "content-type": "application/octet-stream", "content-length": statSync(file).size, ...ISOLATE });
+    return void createReadStream(file).pipe(res);
+  }
   const hit = files[url.pathname];
   if (!hit) return void res.writeHead(404).end();
   const isolate = url.pathname !== "/" || url.searchParams.has("coi");
@@ -110,9 +125,9 @@ try {
   rmSync(site, { recursive: true, force: true });
 }
 
-/** One per-call ms for a run: split total, else same-shape median, else the 128-token sweep point. */
+/** One per-call ms for a run: split total, else same-shape median, else the 128-token sweep point, else batched per call. */
 function headline(r) {
-  return r?.split?.totalMs ?? r?.shape?.sameWarm.median ?? r?.sweep?.find((s) => s.target === 128)?.totalMs;
+  return r?.split?.totalMs ?? r?.shape?.sameWarm.median ?? r?.sweep?.find((s) => s.target === 128)?.totalMs ?? r?.batch?.perCallBatchMs;
 }
 const ms = (x) => (x === undefined ? "-" : x.toFixed(0));
 const err = (e) => `error: ${e.split("\n")[0].replace(/\|/g, "/").slice(0, 160)}`;
@@ -152,6 +167,11 @@ const splitRows = splitRuns.map((r) =>
     ? `| ${r.name} | ${err(r.error)} | | | | | |`
     : `| ${r.name} | ${ms(r.split.encodeMs)} | ${ms(r.split.runMs)} | ${ms(r.split.readMs)} | ${ms(r.split.totalMs)} | ${ms(r.split.coldMs)} | ${base ? `${(base.totalMs / r.split.totalMs).toFixed(2)}x` : "-"} |`,
 );
+const batchRows = ran("batch").map((r) =>
+  r.error
+    ? `| ${r.name} | ${err(r.error)} | | | | | | |`
+    : `| ${r.name} | ${r.batch.tokens.join(", ")} | ${ms(r.batch.batchMs)} | ${ms(r.batch.singlesMs)} | ${ms(r.batch.perCallBatchMs)} | ${ms(r.batch.perCallSingleMs)} | ${r.batch.speedup.toFixed(2)}x | ${r.batch.maxProbDiff.toExponential(1)} |`,
+);
 
 // E4: in a Chromium run, set the newest Firefox result beside this one.
 const out = join(root, "bench/results");
@@ -171,6 +191,10 @@ const wins = [];
 const add = (name, from, to) => from && to && wins.push({ name, from, to, x: from / to });
 add("outputs on the GPU, read back cls_logits only (E3)", base?.totalMs, byName("webgpu fp32 gpu-out")?.split?.totalMs);
 add("WebGPU graph capture (E3)", base?.totalMs, byName("webgpu fp32 graph")?.split?.totalMs);
+for (const n of ["webgpu fp16 batch", "webgpu fp32 batch"]) {
+  const b = byName(n)?.batch;
+  add(`one run of ${b?.size} prompts instead of ${b?.size} single runs, ${n.replace(" batch", "")} (E6)`, b?.perCallSingleMs, b?.perCallBatchMs);
+}
 add("fp16 instead of fp32 on webgpu", byName("webgpu fp32")?.shape?.sameWarm.median, byName("webgpu fp16")?.shape?.sameWarm.median);
 for (const n of ["wasm fp32 isolated 4 threads", "wasm fp32 isolated max threads"]) {
   add(`${n.replace("wasm fp32 isolated ", "")} on isolated wasm, at 128 tokens (E2)`, at(byName("wasm fp32"), 128), at(byName(n), 128));
@@ -223,6 +247,14 @@ const md = [
   `| run | encode | run | read | total, median | cold | speedup vs webgpu fp32 |`,
   `| --- | --- | --- | --- | --- | --- | --- |`,
   ...splitRows,
+  ``,
+  `## E6: one run of 4 prompts against 4 single runs (batched export)`,
+  ``,
+  `Model ${BATCH_MODEL} (export/export_onnx.py, batch axis). Four goals, 20 labels each, rows padded to the longest. Medians of 10 rounds after one warm-up; each round reads back cls_logits only. Δp: worst label probability difference between a batched row and its single run.`,
+  ``,
+  `| run | tokens per row | 1 run of 4 | 4 single runs | per call, batched | per call, single | speedup | Δp |`,
+  `| --- | --- | --- | --- | --- | --- | --- | --- |`,
+  ...(batchRows.length ? batchRows : ["| no batched model, skipped | | | | | | | |"]),
   ``,
   `## E4: Chromium control`,
   ``,
