@@ -10,7 +10,7 @@
 import { snapshot } from "./snapshot.js";
 import type { Action, Page } from "./types";
 import { settle } from "./settle";
-import { clickAt, fillField, markTarget, pressKey, resolveTarget, scrollAt } from "./actuate";
+import { fillField, pressKey, scrollAt, strike } from "./actuate";
 
 export class StalePage extends Error {}
 
@@ -45,12 +45,7 @@ function nodeGuard(node: number) {
   return c ? [c.pageKey(), c.guard(c.nodes.get(node))] : null;
 }
 
-function scrollIntoView(node: number) {
-  window.__glinerFast?.nodes.get(node)?.scrollIntoView({ block: "center", inline: "center" });
-  return true;
-}
-
-nameInjected({ attached, readyState, nodeGuard, scrollIntoView, snapshot, settle, clickAt, fillField, markTarget, pressKey, resolveTarget, scrollAt });
+nameInjected({ attached, readyState, nodeGuard, snapshot, settle, fillField, pressKey, scrollAt, strike });
 
 export class TabBrowser {
   private afterInput: Action | null = null;
@@ -205,24 +200,13 @@ export class TabBrowser {
       await this.evaluate(pressKey, "Enter");
     } else {
       if (typeof action.node !== "number") throw new Error("Invalid observed node");
-      if (action.offscreen) {
-        await this.evaluate(scrollIntoView, action.node);
-        await sleep(50);
-      }
-      const target = await this.evaluate(resolveTarget, action);
-      if (!target) {
+      // One call resolves, outlines, waits and clicks, right after the stale check above.
+      if (!(await this.evaluate(strike, action, this.showActions ? actionLabel(action, text) : null))) {
         if (kind === "select") throw new Error("Dropdown execution was not confirmed; inspect before retrying.");
         throw new StalePage("Target changed or is covered. Observe again.");
       }
-      if (this.showActions) {
-        await this.evaluate(markTarget, target, actionLabel(action, text)).catch(() => {});
-        await sleep(120);
-      }
-      if (kind !== "select") {
-        await this.evaluate(clickAt, target.x, target.y);
-        if (kind === "fill" && (await this.evaluate(fillField, action.node, text ?? "")) == null) {
-          throw new StalePage("Field went away before typing. Observe again.");
-        }
+      if (kind === "fill" && (await this.evaluate(fillField, action.node, text ?? "")) == null) {
+        throw new StalePage("Field went away before typing. Observe again.");
       }
     }
     this.afterInput = kind !== "wait" && kind !== "key" ? action : null;

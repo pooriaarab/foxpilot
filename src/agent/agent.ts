@@ -208,8 +208,8 @@ export class Agent {
     }
   }
 
+  /** Every path here has just observed the page. The stale check before input catches later changes. */
   private async predict() {
-    if (!(await this.browser.fresh(this.page))) this.page = await this.browser.observe();
     if (this.view.history.length >= MAX_STEPS) {
       this.view.status = "blocked";
       throw new Error(`Stopped at the ${MAX_STEPS}-action budget`);
@@ -265,7 +265,6 @@ export class Agent {
     let text: string | null = null;
     let textMs = 0;
     if (action.kind === "fill") {
-      if (!(await this.browser.fresh(page))) throw new StalePage("Page changed before text generation. Choose again.");
       const context: FieldContext = {
         goal: this.view.goal,
         requirement: decision.requirement,
@@ -286,6 +285,8 @@ export class Agent {
         this.refused.add(action.label);
         this.view.status = "ready";
         this.view.textCalls.push({ field: action.label, error: error.message });
+        // The writer took time; the next decision reads the page as it is now.
+        this.page = await this.browser.observe();
         return;
       }
       textMs = Math.round(performance.now() - started);
