@@ -1,5 +1,8 @@
 // Shapes produced by snapshot.js and recorded by the agent loop.
 
+/** The name of the Port between TabBrowser and the page kit (kit.ts). */
+export const KIT_PORT = "foxpilot-kit";
+
 export type Action = {
   id: string;
   kind: "click" | "fill" | "select" | "scroll" | "key" | "wait";
