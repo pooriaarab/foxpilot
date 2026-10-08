@@ -2,7 +2,7 @@
 // label classification, on one fused ONNX graph (see export/export_onnx.py).
 // Encoding and decoding follow the Python gliner2 processor and runtime so
 // token ids and results match it (tests/parity.test.ts).
-import { AutoModel, AutoTokenizer, Tensor } from "@huggingface/transformers";
+import { AutoModel, AutoTokenizer, Tensor, env } from "@huggingface/transformers";
 import type { PreTrainedModel, PreTrainedTokenizer } from "@huggingface/transformers";
 
 export type Labels = Record<string, string | undefined>;
@@ -29,6 +29,9 @@ export type Encoded = {
 
 export type EncodeTask = { name: string; marker: "[E]" | "[L]"; labels: Labels };
 
+type Output = "cls_logits" | "count_logits" | "span_logits";
+type Read = { data: number[]; dims: number[] };
+
 export class Gliner2 {
   private constructor(
     private readonly model: PreTrainedModel,
@@ -46,12 +49,18 @@ export class Gliner2 {
       session_options?: Record<string, unknown>;
     } = {},
   ): Promise<Gliner2> {
+    const device = options.device ?? "webgpu";
     const tokenizer = await AutoTokenizer.from_pretrained(modelId);
     const model = await AutoModel.from_pretrained(modelId, {
-      device: options.device ?? "webgpu",
+      device,
       dtype: options.dtype ?? "fp16",
       progress_callback: options.progress_callback,
-      session_options: options.session_options,
+      // On WebGPU, outputs stay on the GPU. Reading every output back costs
+      // about 200 ms per call in Firefox (#70), so run() reads only what it needs.
+      session_options: {
+        ...(device === "webgpu" ? { preferredOutputLocation: "gpu-buffer" } : {}),
+        ...options.session_options,
+      },
     });
     // Added tokens encode to exactly one id.
     const ids = Object.fromEntries(
@@ -117,7 +126,8 @@ export class Gliner2 {
     return { inputIds, wordPositions, schemaPositions, starts, ends, text };
   }
 
-  private async run(encoded: Encoded) {
+  /** Runs the graph and reads back only `names`. Every output on the GPU is released. */
+  private async run<K extends Output>(encoded: Encoded, names: K[]): Promise<Record<K, Read>> {
     const n = encoded.inputIds.length;
     const long = (values: number[]) => new Tensor("int64", BigInt64Array.from(values, BigInt), [1, values.length]);
     const outputs = (await this.model({
@@ -125,20 +135,21 @@ export class Gliner2 {
       attention_mask: long(new Array<number>(n).fill(1)),
       word_positions: long(encoded.wordPositions),
       schema_positions: long(encoded.schemaPositions),
-    })) as Record<"cls_logits" | "count_logits" | "span_logits", Tensor>;
-    const floats = (tensor: Tensor) => Array.from(tensor.to("float32").data as Float32Array);
-    return {
-      cls: floats(outputs.cls_logits),
-      count: floats(outputs.count_logits),
-      span: floats(outputs.span_logits),
-      spanDims: outputs.span_logits.dims as number[],
-    };
+    })) as Record<Output, Tensor>;
+    try {
+      const read = await readBack(names.map((name) => outputs[name]));
+      return Object.fromEntries(
+        names.map((name, i) => [name, { data: Array.from(read[i]!.to("float32").data as Float32Array), dims: read[i]!.dims }]),
+      ) as Record<K, Read>;
+    } finally {
+      for (const tensor of Object.values(outputs)) if (tensor.location === "gpu-buffer") tensor.dispose();
+    }
   }
 
   /** Softmax over the labels, like ClassificationSchema().single(..., activation="softmax"). */
   async classify(text: string, name: string, labels: Labels): Promise<Record<string, number>> {
     const encoded = this.encode(text, { name, marker: "[L]", labels });
-    const { cls } = await this.run(encoded);
+    const cls = (await this.run(encoded, ["cls_logits"])).cls_logits.data;
     const max = Math.max(...cls);
     const exp = cls.map((x) => Math.exp(x - max));
     const sum = exp.reduce((a, b) => a + b, 0);
@@ -148,12 +159,14 @@ export class Gliner2 {
   /** extract_entities(text, types) with include_confidence and include_spans. */
   async extractEntities(text: string, types: Labels, threshold = 0.5): Promise<Record<string, Entity[]>> {
     const encoded = this.encode(text, { name: "entities", marker: "[E]", labels: types });
-    const { count, span, spanDims } = await this.run(encoded);
+    const read = await this.run(encoded, ["count_logits", "span_logits"]);
+    const count = read.count_logits.data;
+    const span = read.span_logits.data;
     const names = Object.keys(types);
     const result: Record<string, Entity[]> = Object.fromEntries(names.map((name) => [name, []]));
     if (argmax(count) <= 0) return result;
 
-    const [, , words, width] = spanDims as [number, number, number, number];
+    const [, , words, width] = read.span_logits.dims as [number, number, number, number];
     names.forEach((name, li) => {
       const raw: Entity[] = [];
       for (let start = 0; start < words; start++) {
@@ -171,6 +184,53 @@ export class Gliner2 {
       result[name] = finalizeSpans(raw);
     });
     return result;
+  }
+}
+
+type GpuBuffer = { mapAsync(mode: number): Promise<void>; getMappedRange(): ArrayBuffer; destroy(): void };
+type GpuDevice = {
+  createBuffer(descriptor: { size: number; usage: number }): GpuBuffer;
+  createCommandEncoder(): {
+    copyBufferToBuffer(source: unknown, sourceOffset: number, target: GpuBuffer, targetOffset: number, size: number): void;
+    finish(): unknown;
+  };
+  queue: { submit(buffers: unknown[]): void };
+};
+
+/**
+ * Copies every GPU tensor in `tensors` to the CPU with one mapAsync: each
+ * GPU to CPU round trip costs about 90 ms in Firefox (#70). CPU tensors pass
+ * through unchanged.
+ */
+async function readBack(tensors: Tensor[]): Promise<Tensor[]> {
+  const onGpu = tensors.filter((tensor) => tensor.location === "gpu-buffer");
+  if (!onGpu.length) return tensors;
+  const device = (env.backends.onnx as { webgpu?: { device?: GpuDevice } }).webgpu?.device;
+  if (!device) throw new Error("ONNX Runtime has no WebGPU device");
+  // ONNX Runtime pads GPU buffers to 16 bytes, so each padded copy stays inside its buffer.
+  const bytes = onGpu.map((tensor) => {
+    if (tensor.type !== "float32" && tensor.type !== "float16") throw new Error(`cannot read back ${tensor.type}`);
+    return tensor.size * (tensor.type === "float16" ? 2 : 4);
+  });
+  const padded = bytes.map((size) => Math.ceil(size / 16) * 16);
+  const offsets = padded.map((_, i) => padded.slice(0, i).reduce((a, b) => a + b, 0));
+  // MAP_READ | COPY_DST
+  const staging = device.createBuffer({ size: padded.reduce((a, b) => a + b, 0), usage: 0x01 | 0x08 });
+  try {
+    const encoder = device.createCommandEncoder();
+    onGpu.forEach((tensor, i) => encoder.copyBufferToBuffer(tensor.ort_tensor.gpuBuffer, 0, staging, offsets[i]!, padded[i]!));
+    device.queue.submit([encoder.finish()]);
+    await staging.mapAsync(0x01); // GPUMapMode.READ
+    const data = staging.getMappedRange().slice(0);
+    return tensors.map((tensor) => {
+      const i = onGpu.indexOf(tensor);
+      if (i < 0) return tensor;
+      const values =
+        tensor.type === "float16" ? new Uint16Array(data, offsets[i], tensor.size) : new Float32Array(data, offsets[i], tensor.size);
+      return new Tensor(tensor.type as "float16" | "float32", values, tensor.dims);
+    });
+  } finally {
+    staging.destroy();
   }
 }
 
