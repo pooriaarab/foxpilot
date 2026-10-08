@@ -108,7 +108,7 @@ async function main() {
     if (cls.location === "gpu-buffer") await cls.getData();
     else void out.cls_logits!.data;
     const t3 = performance.now();
-    if (session === "gpu-out") for (const o of Object.values(out)) ortOf(o).dispose();
+    for (const o of Object.values(out)) if (ortOf(o).location === "gpu-buffer") ortOf(o).dispose();
     return { encodeMs: t1 - t0, runMs: t2 - t1, readMs: t3 - t2, totalMs: t3 - t0 };
   };
   const medians = (rows: Awaited<ReturnType<typeof parts>>[]) =>
