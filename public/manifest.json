@@ -39,6 +39,7 @@
   },
   "permissions": [
     "scripting",
+    "menus",
     "webNavigation",
     "storage",
     "tabGroups"
