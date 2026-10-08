@@ -328,3 +328,22 @@ count, sum of `timing.model`, and `checks`.
 - [Firefox ML WebExtensions API](https://firefox-source-docs.mozilla.org/toolkit/components/ml/extensions.html)
 - [MDN scripting.registerContentScripts](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/scripting/registerContentScripts)
 - [MDN find.find](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/find/find)
+
+## 6. Bench result: shape padding rejected (#44)
+
+`pnpm bench:firefox` on Firefox 157.0.1, macOS, 2026-10-08. Times are ms per GLiNER2 classify call.
+
+| device | dtype | load | cold (first call) | same shape, median | new shape, median | new / same |
+| --- | --- | --- | --- | --- | --- | --- |
+| webgpu | fp16 | 14097 | 808 | 522 | 622 | 1.2x |
+| webgpu | fp32 | 26862 | 2577 | 522 | 615 | 1.2x |
+| wasm | fp32 | 5890 | 1058 | 1283 | 1352 | 1.1x |
+
+A new input shape costs only 1.2x a repeated one, so pipeline recompiles are not
+the main cost, and proposal 2's padding is dropped. Each call costs about 520 ms
+in Firefox against about 40 ms upstream in Chrome, whatever the shape. The cost is
+per dispatch. fp16 runs no faster than fp32, which suggests Firefox does not use
+an f16 path here. WebGPU is still 2.5x faster than wasm.
+
+What follows: cut the number of model calls. Fewer refused decisions (#45), fewer
+labels per call (#48), and one batched call per step (A2) now rank above padding.
