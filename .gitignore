@@ -2,6 +2,6 @@
 dist-model/
 node_modules/
 dist/
-bench/bench.js
+bench/results/
 ref-ultrafast/
 artifacts/

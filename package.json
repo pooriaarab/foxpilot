@@ -12,7 +12,8 @@
     "watch": "node scripts/build.mjs --watch",
     "lint:ext": "web-ext lint -s dist",
     "ci:local": "pnpm typecheck && pnpm test && pnpm build && pnpm lint:ext",
-    "e2e": "pnpm build && node scripts/e2e.mjs"
+    "e2e": "pnpm build && node scripts/e2e.mjs",
+    "bench:firefox": "node bench/run.mjs"
   },
   "license": "MIT",
   "dependencies": {
