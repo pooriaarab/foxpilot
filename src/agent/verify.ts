@@ -4,7 +4,8 @@
 // the page now: a field holding its value, or a control naming its setting
 // ("Change ticket type. One way"). GLiNER2 picks the setting out of a part with
 // no value ("one-way ticket") and recognises error, captcha and empty pages;
-// matching is literal, like the controller's.
+// matching is literal, like the controller's, except on a field the page
+// renamed after the agent committed it.
 import { nearlyNames, namesValue, unsentForms, type Part, type Scorer } from "./controller";
 import { firstDate } from "./dates";
 import type { Action, HistoryEntry, Page } from "./types";
@@ -36,7 +37,30 @@ function controlsOf(page: Page): Action[] {
   return inForm.some((a) => a.kind === "fill") ? inForm : controls;
 }
 
-function evidenceFor(page: Page, part: Part): Check | null {
+/**
+ * A field the page renamed after the agent committed it: Google Maps turns a
+ * taken "Berlin Hauptbahnhof" into "Berlin Central Station" after the next
+ * click. Only the exact node the agent filled for this part counts, and only if
+ * the suggestion it took (or the field right after) named the value, nothing
+ * was typed into that node since, and the field names no other part's value.
+ */
+function renamed(page: Page, part: Part, parts: Part[], history: HistoryEntry[]): Check | null {
+  const names = (text?: string | null) => Boolean(text) && part.values.every((v) => nearlyNames(text!, v));
+  const others = parts.filter((p) => p !== part).flatMap((p) => p.values);
+  for (const [index, commit] of history.entries()) {
+    const node = commit.committed_node;
+    if (node == null || !(names(commit.action) || names(commit.committed_value))) continue;
+    const into = (h: HistoryEntry) => h.kind === "fill" && h.node === node && h.document_id === commit.document_id;
+    if (history.slice(0, index).reverse().find(into)?.requirement !== part.text) continue;
+    if (history.slice(index + 1).some(into)) continue;
+    const field = page.actions.find((a) => a.kind === "fill" && a.node === node && a.document_id === commit.document_id);
+    if (!field?.value?.trim() || others.some((v) => nearlyNames(field.value!, v))) continue;
+    return { part: part.text, ok: true, evidence: `${field.label.trim()}: ${field.value} (renamed by the page after "${commit.action.trim()}")` };
+  }
+  return null;
+}
+
+function evidenceFor(page: Page, part: Part, parts: Part[], history: HistoryEntry[]): Check | null {
   const controls = controlsOf(page);
   if (part.date) {
     const field = controls.find((a) => shown(a).some((t) => firstDate(t) === part.date));
@@ -49,6 +73,8 @@ function evidenceFor(page: Page, part: Part): Check | null {
     const field = controls.find((a) => a.value && part.values.every((v) => nearlyNames(a.value!, v)));
     return { part: part.text, ok: true, evidence: field ? `${field.label.trim()}: ${field.value}` : "named on the page" };
   }
+  const kept = renamed(page, part, parts, history);
+  if (kept) return kept;
   // Without a form, results often name the values in text only ("New York to San Francisco").
   const hasForm = page.actions.some((a) => a.form != null && a.kind === "fill");
   if (!hasForm && missing.every((value) => nearlyNames(page.text, value))) return { part: part.text, ok: true, evidence: "in the page text" };
@@ -78,7 +104,7 @@ function settingShown(page: Page, span: string): { control?: Action; unselected?
 export async function verify(model: Scorer, page: Page, parts: Part[], history: HistoryEntry[]): Promise<Verdict> {
   const checks: Check[] = [];
   for (const part of parts) {
-    const valued = evidenceFor(page, part);
+    const valued = evidenceFor(page, part, parts, history);
     if (valued) {
       checks.push(valued);
       continue;
