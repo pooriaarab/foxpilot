@@ -97,8 +97,7 @@ function collectRows() {
     const t = text(e);
     if (t.length < 20 || !money.test(t)) return false;
     // A calendar week or a price grid ("9 $254 10 $244 …") is not a result.
-    // As the string version ran it: its template literal dropped both backslashes.
-    if ((t.match(/[$€£¥₹]s?d/g) || []).length >= 3) return false;
+    if ((t.match(/[$€£¥₹]\s?\d/g) || []).length >= 3) return false;
     stats.priced++;
     // Rows can carry long screen-reader text ("Leaves … at 6:00 AM").
     if (t.length > 2000) { stats.long++; return false; }
