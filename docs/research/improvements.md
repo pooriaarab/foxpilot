@@ -347,3 +347,26 @@ an f16 path here. WebGPU is still 2.5x faster than wasm.
 
 What follows: cut the number of model calls. Fewer refused decisions (#45), fewer
 labels per call (#48), and one batched call per step (A2) now rank above padding.
+
+## 7. Where the per-call time goes (#70)
+
+`pnpm bench:firefox` and `pnpm bench:firefox --browser chromium`, macOS, 2026-10-08. ms per GLiNER2 call.
+
+| run | Firefox 157 | Chromium 153 | Firefox / Chromium |
+| --- | --- | --- | --- |
+| webgpu fp16 | 510 | 36 | 14.2x |
+| webgpu fp32 | 513 | 35 | 14.8x |
+| webgpu fp32, outputs kept on the GPU | 311 | 34 | 9.3x |
+| webgpu fp32, graph capture | 311 | 34 | 9.3x |
+| wasm fp32, 1 thread | 1047 | 1045 | 1.0x |
+| wasm fp32, 4 threads (cross-origin isolated) | 229 | 247 | 0.9x |
+
+- A fixed per-call cost dominates in Firefox. A 15-token call takes 514 ms and a 128-token call 509 ms. Each token adds only 0.63 ms.
+- Most of that cost is reading outputs back to the CPU. With outputs kept on the GPU, the call takes 311 ms, and reading back `cls_logits` alone takes 93 ms of it.
+- wasm runs at the same speed in both browsers, so the gap is Firefox's WebGPU path, not the model.
+- Threaded wasm is the fastest Firefox option, but extension pages cannot be cross-origin isolated today (bug 1750654, bug 1673477).
+
+What follows, in order:
+1. Keep outputs on the GPU and read back only what each call needs (1.65x per call, available now).
+2. Score every open requirement in one GLiNER2 call per step. Each call costs a fixed ~300–500 ms, so one call instead of four saves most of a step.
+3. Report the readback cost to Mozilla with this bench as a reproducer.
