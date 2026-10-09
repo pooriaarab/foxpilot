@@ -103,20 +103,23 @@ export async function strike(action: Acted, label: string | null): Promise<boole
   }
 
   const e = window.__glinerFast?.nodes.get(action.node!);
-  if (action.offscreen && e?.isConnected) {
-    e.scrollIntoView({ block: "center", inline: "center" });
+  // A custom switch hides its checkbox and draws a <label for> (snapshot.js offers it so): aim at the label.
+  const seen = (n: Element) => n.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true });
+  const box = e instanceof HTMLInputElement && (e.type === "checkbox" || e.type === "radio") && !seen(e) ? e : null;
+  const aim = (box && [...(box.labels ?? [])].find((l) => seen(l) && l.getBoundingClientRect().width > 0)) || e;
+  if (action.offscreen && aim?.isConnected) {
+    aim.scrollIntoView({ block: "center", inline: "center" });
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
-  if (!e?.isConnected || e.matches(":disabled") || e.closest('[aria-disabled="true"],[inert]') ||
-      !e.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) return false;
+  if (!e?.isConnected || !aim || e.matches(":disabled") || e.closest('[aria-disabled="true"],[inert]') || !seen(aim)) return false;
   if (action.kind === "fill" && ((e as HTMLInputElement).readOnly || e.getAttribute("aria-readonly") === "true")) return false;
-  const r = e.getBoundingClientRect(), x = r.x + r.width / 2, y = r.y + r.height / 2;
+  const r = aim.getBoundingClientRect(), x = r.x + r.width / 2, y = r.y + r.height / 2;
   if (!r.width || !r.height || x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) return false;
   let hit = document.elementFromPoint(x, y);
   while (hit?.shadowRoot) { const inner = hit.shadowRoot.elementFromPoint(x, y); if (!inner || inner === hit) break; hit = inner; }
   const path: Node[] = [];
   for (let n: Node | null | undefined = hit; n; n = (n as Element).parentElement || (n.parentNode as ShadowRoot | null)?.host) path.push(n);
-  if (!path.includes(e)) return false;
+  if (!path.includes(aim)) return false;
   if (action.kind === "select") {
     const select = e as HTMLSelectElement;
     if (e.tagName !== "SELECT" || ![...select.options].some((o) => o.value === action.value && !o.disabled && !o.closest("optgroup[disabled]"))) return false;
