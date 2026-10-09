@@ -4,6 +4,11 @@ import { searchQuery } from "../src/agent/search";
 import { onSite, siteIn, withoutSite } from "../src/agent/site";
 import type { HistoryEntry, Page } from "../src/agent/types";
 
+/** A test scorer's batched call: the same answers as one call per text. */
+const batched = <T extends { classify: (t: string, n: string, l: Record<string, unknown>) => Promise<Record<string, number>> }>(m: T) =>
+  ({ ...m, classifyMany: (texts: string[], n: string, labels: Record<string, unknown>) => Promise.all(texts.map((t) => m.classify(t, n, labels))) });
+
+
 describe("sites named in a goal", () => {
   it("finds the domain and the words that attach it", () => {
     const site = siteIn("find me kitchenaid mixer on amazon.com")!;
@@ -53,12 +58,12 @@ describe("autocomplete in a search box", () => {
   });
   const history: HistoryEntry[] = [{ action: "Search", node: 1, document_id: 1, kind: "fill", text: "kitchenaid mixer" }];
   const parts: Part[] = [{ text: "kitchenaid mixer", values: ["kitchenaid mixer"], date: null }];
-  const model = {
+  const model = batched({
     extractEntities: async () => ({}),
     // Scores the unrelated suggestion highest, like "crunchbase" in the real run.
     classify: async (_t: string, _n: string, labels: Record<string, unknown>) =>
       Object.fromEntries(Object.keys(labels).map((l) => [l, /crunchbase/.test(l) ? 0.39 : 0.01])),
-  };
+  });
 
   it("does not take a suggestion that drops the query", async () => {
     const decision = await choose(model, page(["crunchbase"]), history, new Map(), new Set(), parts, new Set(parts.map((p) => p.text)));
@@ -83,7 +88,7 @@ describe("popups while typing", () => {
     };
     const history: HistoryEntry[] = [{ action: "Search Amazon", node: 1, document_id: 1, kind: "fill", text: "kitchenaid mixer" }];
     const parts: Part[] = [{ text: "kitchenaid mixer", values: ["kitchenaid mixer"], date: null }];
-    const model = { extractEntities: async () => ({}), classify: async (_t: string, _n: string, labels: Record<string, unknown>) => Object.fromEntries(Object.keys(labels).map((l) => [l, 0.92])) };
+    const model = batched({ extractEntities: async () => ({}), classify: async (_t: string, _n: string, labels: Record<string, unknown>) => Object.fromEntries(Object.keys(labels).map((l) => [l, 0.92])) });
     const decision = await choose(model, page, history, new Map(), new Set(), parts, new Set(["kitchenaid mixer"]));
     expect(decision.target).not.toBe("Ask Alexa about this");
   });
@@ -101,7 +106,7 @@ describe("dropdowns", () => {
     };
     const parts: Part[] = [{ text: "kitchenaid hand mixer", values: ["kitchenaid hand mixer"], date: null }];
     const scores: Record<string, number> = { "Sort by: → Price: High to Low": 0.29, "Sort by: → Price: Low to High": 0.27, "Search Amazon": 0.1 };
-    const model = { extractEntities: async () => ({}), classify: async (_t: string, _n: string, labels: Record<string, unknown>) => Object.fromEntries(Object.keys(labels).map((l) => [l, scores[l] ?? 0.01])) };
+    const model = batched({ extractEntities: async () => ({}), classify: async (_t: string, _n: string, labels: Record<string, unknown>) => Object.fromEntries(Object.keys(labels).map((l) => [l, scores[l] ?? 0.01])) });
     const decision = await choose(model, page, [], new Map(), new Set(), parts, new Set());
     expect(decision.target).toBe("Search Amazon");
   });
@@ -135,8 +140,8 @@ describe("typos in the goal", () => {
       { text: "to Blazing Bagles Redmond", values: ["blazing bagles redmond"], date: null },
     ];
     // The model prefers the playground, as in the real run (0.47).
-    const model = { extractEntities: async () => ({}), classify: async (_t: string, _n: string, labels: Record<string, unknown>) =>
-      Object.fromEntries(Object.keys(labels).map((l) => [l, /Playground/.test(l) ? 0.47 : 0.3])) };
+    const model = batched({ extractEntities: async () => ({}), classify: async (_t: string, _n: string, labels: Record<string, unknown>) =>
+      Object.fromEntries(Object.keys(labels).map((l) => [l, /Playground/.test(l) ? 0.47 : 0.3])) });
     const decision = await choose(model, page, history, new Map(), new Set(), parts, new Set());
     expect(decision.target).toMatch(/^Marymoor Park {4}West Lake/);
     expect(decision.covered).toEqual(["from Marmoor Park"]);
@@ -160,7 +165,7 @@ describe("a field renamed by typing into it", () => {
       { action: "Choose destination, or click on the map...", node: 5, document_id: 1, kind: "fill", text: "Blazing Bagels Redmond", requirement: "to Blazing Bagels Redmond" },
     ];
     const parts: Part[] = [{ text: "to Blazing Bagels Redmond", values: ["blazing bagels redmond"], date: null }];
-    const model = { extractEntities: async () => ({}), classify: async (_t: string, _n: string, labels: Record<string, unknown>) => Object.fromEntries(Object.keys(labels).map((l) => [l, 0.01])) };
+    const model = batched({ extractEntities: async () => ({}), classify: async (_t: string, _n: string, labels: Record<string, unknown>) => Object.fromEntries(Object.keys(labels).map((l) => [l, 0.01])) });
     const decision = await choose(model, page, history, new Map(), new Set(), parts, new Set(parts.map((p) => p.text)));
     expect(decision.operation).toBe("PRESS_ENTER");
   });
