@@ -49,6 +49,12 @@ importers:
         specifier: ^10.7.0
         version: 10.7.0(express@5.2.1)
 
+  apps/consent-shield:
+    dependencies:
+      '@foxpilot/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+
   apps/foxpilot:
     dependencies:
       '@foxpilot/agent':
