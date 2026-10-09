@@ -31,6 +31,10 @@ if (existsSync(amoFile) && JSON.parse(readFileSync(amoFile, "utf8")).channel ===
   if (manifest.browser_specific_settings?.gecko?.update_url) {
     throw new Error(`${app} is listed, so its manifest must not set gecko.update_url.`);
   }
+  // The listing goes to AMO as version.approval_notes, which AMO caps at 3000 characters.
+  const notes = join(appDir, "listing", "approval-notes.md");
+  const length = existsSync(notes) ? readFileSync(notes, "utf8").length : 0;
+  if (length > 3000) throw new Error(`${app}: listing/approval-notes.md has ${length} characters; AMO takes at most 3000.`);
 }
 
 // ONNX Runtime's wasm must ship inside the extension (MV3 blocks remote code).

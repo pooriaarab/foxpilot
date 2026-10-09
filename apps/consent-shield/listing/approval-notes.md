@@ -19,10 +19,6 @@ The user can switch the add-on off for each site in the popup. That list of host
 
 The add-on makes no network request. The model (foxmind-small, ONNX, q8) and the ONNX Runtime wasm ship inside the package and run in the background page with WebAssembly. `packages/core/src/model/load.ts` sets `env.allowRemoteModels = false`. The manifest declares `data_collection_permissions` as `required: ["none"]`.
 
-## Firefox's own cookie banner handling
-
-Firefox removed its built-in cookie banner handling in version 155 (bug 2058143). Consent Shield needs Firefox 157 or later, so the two never run side by side.
-
 ## web-ext lint warnings
 
 `web-ext lint` reports 0 errors and 3 warnings. All three are in third-party code:
