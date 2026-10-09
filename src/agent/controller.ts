@@ -5,7 +5,7 @@
 // by side; tests/controller.test.ts checks the decisions match it.
 import { firstDate, resolveDate, sameDate, type IsoDate } from "./dates";
 import type { Action, HistoryEntry, Page } from "./types";
-import { isSearchField } from "./search";
+import { destinationAsk, isSearchField } from "./search";
 import { parseAsk, properName } from "./ask";
 import { patience } from "./patience";
 import { acceptsAll, declining, refusing, stanceOf, type Control } from "./dialogs";
@@ -744,21 +744,68 @@ async function suggestion(model: Scorer, ordered: Map<string, Group>, history: H
   return { requirement: null, score: confidence, group: options.get(picked)!, commits: true };
 }
 
+/** The requirement of a step that followed a link, and the most such steps in a run. */
+const FOLLOW = "follow link: ";
+const FOLLOW_LIMIT = 6;
+/** Characters of page text after a link that count as its blurb. */
+const BLURB = 120;
+
+/** Words with a digit ("RV-7", "22", "DK-100") must match whole; "30-section" is a count, not a code. */
+const codesIn = (text: string) =>
+  [...new Set(String(text).toLowerCase().match(/[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)*/gu)?.filter((w) => /\d/.test(w) && !/^\d+-\p{L}+$/u.test(w)) ?? [])];
+
+const STOP = new Set("the and for that this its own page per with from what are you your open find report navigate".split(" "));
+/** Content words of a text, lightly stemmed ("desks" and "desk" match). */
+const contentWords = (text: string) =>
+  new Set(wordsOf(text).filter((w) => w.length >= 3 && !STOP.has(w)).map((w) => w.replace(/s$/, "")));
+
 /**
- * Zipline addition (not in the Python controller): a short goal that names no
- * value ("snowflake stock price") matches no control above the 0.5 floor, so
- * nothing is chosen and the run ends. When the page has an open search box and
- * nothing has been typed yet, the goal goes into it as a query.
+ * Zipline addition (not in the Python controller): the ask names a page to
+ * reach ("open the Section 22 page", "Form RV-7 instructions") and nothing on
+ * this page serves it. Only the destination part of the goal counts; an ask
+ * that reports, configures or searches names no page, so no link is followed.
+ * A link must share a content word or a code with the ask, so site chrome
+ * (Terms, Help, My account) is never a candidate. Its label and blurb are
+ * scored by GLiNER2. A code in the ask must match a link's code whole: RV-7 is
+ * not RV-7A. A link is followed once, and a run follows at most six.
  */
-function searchFallback(ordered: Map<string, Group>, history: HistoryEntry[], parts: Part[]): Chosen | null {
-  if (parts.length === 0 || parts.length > 2 || history.some((h) => h.kind === "fill")) return null;
-  for (const group of ordered.values()) {
+async function followLink(
+  model: Scorer, state: Page, ordered: Map<string, Group>, history: HistoryEntry[], parts: Part[], goal: string,
+): Promise<Chosen | null> {
+  const target = parts.length ? destinationAsk(goal) : null;
+  if (!target) return null;
+  if (history.filter((h) => String(h.requirement ?? "").startsWith(FOLLOW)).length >= FOLLOW_LIMIT) return null;
+  const open = [...ordered.values()].filter((g) => g.open);
+  // A page with a form to fill still has work for the values of the goal.
+  if (parts.some((p) => p.values.length) && open.some((g) => g.takesValue && !isSearchField(execute(g)))) return null;
+  const codes = codesIn(target);
+  if (codes.length ? codes.every((c) => codesIn(state.title).includes(c)) : namesValue(state.title, target)) return null;
+
+  const text = state.text.replace(/\s+/g, " ");
+  const blurb = (label: string) => {
+    const at = text.indexOf(label);
+    return at < 0 ? "" : text.slice(at + label.length, at + label.length + BLURB).trim();
+  };
+  const wanted = contentWords(target);
+  const links = new Map<string, Group>();
+  for (const group of open) {
     const action = execute(group);
-    if (group.open && action.kind === "fill" && isSearchField({ label: action.label, role: action.role })) {
-      return { requirement: parts[parts.length - 1]!.text, score: 1.0, group };
-    }
+    if (action.kind !== "click" || action.role !== "link" || action.dialog || isUnsafe(action)) continue;
+    if (/footer/.test(action.section ?? "")) continue;
+    const label = clean(action.label);
+    const words = [...contentWords(`${label} ${blurb(label)}`)];
+    const shares = words.some((w) => wanted.has(w)) || codes.some((c) => codesIn(`${label} ${blurb(label)}`).includes(c));
+    if (shares && !links.has(label)) links.set(label, group);
   }
-  return null;
+  // Codes: only links that hold every code whole are candidates.
+  let kept = [...links.keys()];
+  if (codes.length) kept = kept.filter((label) => codes.every((c) => codesIn(label).includes(c)));
+  kept = kept.slice(0, LABEL_CAP);
+  if (!kept.length) return null;
+  const labels: Labels = Object.fromEntries(kept.map((label) => [label, blurb(label) || undefined]));
+  const [label, score] = top(await model.classify(clean(target, 300), "destination", labels));
+  if (score < FLOOR) return null;
+  return { requirement: FOLLOW + clean(target, 60), score, group: links.get(label)! };
 }
 
 /** A field that takes a date, judged by its label ("Departure", "Return", "Check-in", "Date"). */
@@ -783,7 +830,7 @@ function idle(history: HistoryEntry[]): number {
 /** One observation, one decision. */
 export async function choose(
   model: Scorer, state: Page, history: HistoryEntry[], memory: Memory, refused: Set<string>,
-  allParts: Part[], served: Set<string>,
+  allParts: Part[], served: Set<string>, goal = "",
 ): Promise<Decision> {
   const parts = allParts.filter((p) => !served.has(p.text));
   // Zipline addition: dates are resolved and matched in code. When an open
@@ -800,8 +847,8 @@ export async function choose(
   chosen = committing ? [committing] : ((await dialog(model, ordered, chosen, history, allParts)) ?? chosen);
   const commits = Boolean(committing);
   if (!chosen.length) {
-    const searching = searchFallback(ordered, history, parts);
-    if (searching) chosen = [searching];
+    const following = await followLink(model, state, ordered, history, parts, goal);
+    if (following) chosen = [following];
   }
 
   let choice: string, operation: string, confidence: number, requirement: string | null, covered: string[];

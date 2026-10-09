@@ -7,7 +7,7 @@
 import { pipeline, type TextGenerationPipeline } from "@huggingface/transformers";
 import { reshape } from "./ask";
 import type { Labels, Part, Scorer } from "./controller";
-import { isSearchField, searchQuery } from "./search";
+import { isSearchField, searchAsk, searchQuery } from "./search";
 
 export { isSearchField, searchQuery };
 
@@ -62,12 +62,11 @@ export class SpanWriter implements FieldWriter {
       if (this.model && !plain && (key !== part.key || score < KEY_FLOOR)) throw new Refused(`"${context.field.label}" is not a field for the ${part.key}`);
       return reshape(this.literal(part), context.field.label);
     }
-    // Into a search box, the goal is the query itself ("Weather in Seattle"),
-    // not the value one part of it names ("Seattle"): always for short goals,
-    // and for any goal when the search box is the page's only text field (a
-    // search engine home page given a whole trip to find).
-    if (isSearchField(context.field) && (this.parts.length <= 2 || context.textFields === 1)) {
-      return searchQuery(context.goal);
+    // Into a search box goes the object the ask names ("use the search to find
+    // X" types X). An ask that never says to search types nothing here.
+    if (isSearchField(context.field)) {
+      const query = searchAsk(context.goal);
+      if (query) return query;
     }
     if (!part) throw new Refused("No requirement chose this field");
     if (part.date) return part.date;
@@ -137,7 +136,10 @@ export class LlmWriter implements FieldWriter {
   }
 
   async write(context: FieldContext): Promise<string> {
-    if (isSearchField(context.field) && context.textFields === 1) return searchQuery(context.goal);
+    if (isSearchField(context.field)) {
+      const query = searchAsk(context.goal);
+      if (query) return query;
+    }
     const generator = await this.load();
     const messages = [
       { role: "system", content: TEXT_VALUE },

@@ -233,7 +233,7 @@ export class Agent {
       },
     };
     const started = performance.now();
-    const decision = await choose(counted, this.page, this.view.history, this.memory, this.refused, this.parts, this.served);
+    const decision = await choose(counted, this.page, this.view.history, this.memory, this.refused, this.parts, this.served, this.view.goal);
     const decide = Math.round(performance.now() - started);
     this.timing = { decide, calls: stats.calls, model: Math.round(stats.model), labels: stats.labels, act: 0, observe: 0 };
     this.view.modelMs += decision.latencyMs;
