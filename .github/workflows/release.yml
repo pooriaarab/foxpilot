@@ -14,21 +14,16 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  plan:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    env:
-      AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
-      AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+    outputs:
+      apps: ${{ steps.plan.outputs.apps }}
     steps:
       - uses: actions/checkout@v4
-      - name: Refuse a version that is already released
-        run: |
-          VERSION=$(node -p "require('./apps/foxpilot/public/manifest.json').version")
-          if [ -n "$(git ls-remote --tags origin "refs/tags/v${VERSION}")" ]; then
-            echo "::error::Version ${VERSION} is already released. Bump apps/foxpilot/public/manifest.json version."
-            exit 1
-          fi
+        with:
+          fetch-depth: 0
+          fetch-tags: true
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -38,6 +33,31 @@ jobs:
       # The browser tests drive Chromium through Playwright.
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm ci:local
+      - id: plan
+        run: node scripts/release-plan.mjs
+
+  sign:
+    needs: plan
+    if: needs.plan.outputs.apps != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.apps) }}
+    env:
+      AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+      AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node scripts/build.mjs ${{ matrix.app }}
       - name: Archive the source for AMO review
         run: git archive --format=zip -o source.zip HEAD
       - name: Sign with AMO
@@ -50,16 +70,16 @@ jobs:
             fi
           done
           [ "$missing" -eq 0 ] || exit 1
-          pnpm exec web-ext sign -s dist/foxpilot -a web-ext-artifacts/signed --channel=unlisted \
+          pnpm exec web-ext sign -s "dist/${{ matrix.app }}" -a "web-ext-artifacts/${{ matrix.app }}" \
+            --channel="${{ matrix.channel }}" \
             --api-key="$AMO_JWT_ISSUER" --api-secret="$AMO_JWT_SECRET" \
             --upload-source-code source.zip
       - name: Create the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          VERSION=$(node -p "require('./dist/foxpilot/manifest.json').version")
-          TAG="v${VERSION}"
-          FILES=(web-ext-artifacts/signed/*.xpi)
+          TAG="${{ matrix.app }}-v${{ matrix.version }}"
+          FILES=("web-ext-artifacts/${{ matrix.app }}"/*.xpi)
           if [ ! -e "${FILES[0]}" ]; then
             echo "::error::Signing produced no .xpi file."
             exit 1
