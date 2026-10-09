@@ -5,7 +5,7 @@ import { env } from "@huggingface/transformers";
 import { describe, expect, it } from "vitest";
 import { choose, requirements, type Part } from "../src/agent/controller";
 import type { HistoryEntry, Page } from "../src/agent/types";
-import { Gliner2 } from "../src/model/gliner2";
+import { Gliner2 } from "@foxpilot/core/model/gliner2";
 
 type OracleCase = {
   name: string;

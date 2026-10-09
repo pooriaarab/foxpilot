@@ -3,7 +3,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { env } from "@huggingface/transformers";
 import { describe, expect, it } from "vitest";
-import { Gliner2, type Labels } from "../src/model/gliner2";
+import { Gliner2, type Labels } from "@foxpilot/core/model/gliner2";
 
 type Case = {
   kind: "extract" | "classify";

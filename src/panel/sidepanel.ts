@@ -8,7 +8,7 @@ import { LlmWriter, SpanWriter, type FieldWriter } from "../agent/fieldtext";
 import { Reporter } from "../agent/report";
 import { verify, type Check, type Verdict } from "../agent/verify";
 import { onSite, siteIn, withoutSite } from "../agent/site";
-import { Gliner2, type ModelCall } from "../model/gliner2";
+import { Gliner2, type ModelCall } from "@foxpilot/core/model/gliner2";
 import { TabGroupStatus } from "./tabgroup";
 
 export const GLINER_MODEL = "pooria/gliner2-multi-v1-agent-batch-ONNX";
