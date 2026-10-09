@@ -1,6 +1,5 @@
 // Side panel: loads the models, runs the agent on the current tab, and shows
 // every decision as it happens. window.foxpilot exposes the same run to scripts.
-import { env } from "@huggingface/transformers";
 import { Agent, type AgentView, type Refusal, type Status, type Step, type Timing } from "@foxpilot/agent/agent";
 import { nameInjected, TabBrowser, type Calls } from "@foxpilot/core/page/browser";
 import { clear, findAnswer, lastNote, lastRows, lastScores } from "@foxpilot/agent/answer";
@@ -14,13 +13,6 @@ import { TabGroupStatus } from "./tabgroup";
 
 /** app.config.mjs `model`, set by scripts/build.mjs from packages/core/src/model/models.ts. */
 declare const __MODEL__: AppModel;
-
-// MV3 forbids remote code and blob: imports, so ONNX Runtime loads from ort/.
-env.useWasmCache = false;
-env.backends.onnx.wasm!.wasmPaths = {
-  mjs: chrome.runtime.getURL("ort/ort-wasm-simd-threaded.asyncify.mjs"),
-  wasm: chrome.runtime.getURL("ort/ort-wasm-simd-threaded.asyncify.wasm"),
-};
 
 const EXAMPLES = [
   {
