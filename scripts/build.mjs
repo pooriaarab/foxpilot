@@ -1,7 +1,7 @@
 // Bundles one app from apps/<app>/ into dist/<app>/, as its app.config.mjs says.
 // Usage: node scripts/build.mjs [app] [--watch]. The default app is foxpilot.
 import * as esbuild from "esbuild";
-import { cpSync, existsSync, mkdirSync, readdirSync, realpathSync, rmSync, statSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { models } from "../packages/core/src/model/models.ts";
@@ -23,6 +23,15 @@ const model = config.model ? { name: config.model, ...models[config.model] } : n
 // accepted is 200 MB" in extensionworkshop.com/documentation/publish/submitting-an-add-on/).
 // The .xpi is a zip of dist/<app>, and ONNX weights barely compress, so the check uses the unzipped size.
 const AMO_MAX_BYTES = 200 * 1000 * 1000;
+
+// A listed app updates through AMO, so its manifest must not set update_url.
+const amoFile = join(appDir, "listing", "amo.json");
+if (existsSync(amoFile) && JSON.parse(readFileSync(amoFile, "utf8")).channel === "listed") {
+  const manifest = JSON.parse(readFileSync(join(appDir, "public", "manifest.json"), "utf8"));
+  if (manifest.browser_specific_settings?.gecko?.update_url) {
+    throw new Error(`${app} is listed, so its manifest must not set gecko.update_url.`);
+  }
+}
 
 // ONNX Runtime's wasm must ship inside the extension (MV3 blocks remote code).
 const transformersDir = realpathSync(join(root, "packages/core/node_modules/@huggingface/transformers"));
