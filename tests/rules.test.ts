@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isDateField, isUnsafe } from "../src/agent/controller";
+import { isDateField, isUnsafe } from "@foxpilot/agent/controller";
 
 const field = (label: string) => ({ id: "e1", kind: "fill" as const, label });
 

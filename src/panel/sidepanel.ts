@@ -1,12 +1,12 @@
 // Side panel: loads the models, runs the agent on the current tab, and shows
 // every decision as it happens. window.foxpilot exposes the same run to scripts.
 import { env } from "@huggingface/transformers";
-import { Agent, type AgentView, type Refusal, type Status, type Step, type Timing } from "../agent/agent";
+import { Agent, type AgentView, type Refusal, type Status, type Step, type Timing } from "@foxpilot/agent/agent";
 import { nameInjected, TabBrowser, type Calls } from "@foxpilot/core/page/browser";
-import { clear, findAnswer, lastNote, lastRows, lastScores } from "../agent/answer";
-import { LlmWriter, SpanWriter, type FieldWriter } from "../agent/fieldtext";
+import { clear, findAnswer, lastNote, lastRows, lastScores } from "@foxpilot/agent/answer";
+import { LlmWriter, SpanWriter, type FieldWriter } from "@foxpilot/agent/fieldtext";
 import { Reporter, type Answer } from "@foxpilot/core/report";
-import { verify, type Check, type Verdict } from "../agent/verify";
+import { verify, type Check, type Verdict } from "@foxpilot/agent/verify";
 import { onSite, siteIn, withoutSite } from "@foxpilot/core/page/site";
 import { Gliner2, type ModelCall } from "@foxpilot/core/model/gliner2";
 import { TabGroupStatus } from "./tabgroup";

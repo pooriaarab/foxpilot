@@ -2,9 +2,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import { env } from "@huggingface/transformers";
 import { beforeAll, describe, expect, it } from "vitest";
-import { requirements, type Part } from "../src/agent/controller";
+import { requirements, type Part } from "@foxpilot/agent/controller";
 import type { HistoryEntry, Page } from "@foxpilot/core/page/types";
-import { verify } from "../src/agent/verify";
+import { verify } from "@foxpilot/agent/verify";
 import { Gliner2 } from "@foxpilot/core/model/gliner2";
 
 const ROOT = new URL("..", import.meta.url).pathname;
