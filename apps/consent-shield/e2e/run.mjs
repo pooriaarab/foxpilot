@@ -31,7 +31,7 @@ const ZOO = [
 // `last` must be among the presses; with no `last` the add-on must do nothing.
 // `off` names the hosts switched off for the page.
 const FIXTURES = [
-  { page: "onetrust.html", last: "Confirm My Choices", never: ["Accept All Cookies", "Allow All"] },
+  { page: "onetrust.html", last: "Confirm My Choices", never: ["Accept All Cookies", "Allow All", "Cookie Policy", "Privacy Notice"] },
   { page: "tcf.html", last: "SAVE & EXIT", never: ["AGREE", "ACCEPT ALL"] },
   { page: "banner.html", last: "Reject", never: ["Accept"] },
   { page: "nag.html", last: "No thanks", never: ["Subscribe"] },
