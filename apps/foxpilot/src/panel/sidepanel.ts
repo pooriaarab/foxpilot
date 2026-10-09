@@ -11,7 +11,7 @@ import { onSite, siteIn, withoutSite } from "@foxpilot/core/page/site";
 import { Gliner2, type ModelCall } from "@foxpilot/core/model/gliner2";
 import { TabGroupStatus } from "./tabgroup";
 
-export const GLINER_MODEL = "pooria/gliner2-multi-v1-agent-batch-ONNX";
+export const FOXMIND_MODEL = "pooria/foxmind";
 
 // MV3 forbids remote code and blob: imports, so ONNX Runtime loads from ort/.
 env.useWasmCache = false;
@@ -112,7 +112,7 @@ async function loadGliner(): Promise<number> {
   setModel("gliner", "loading", "Downloading 614 MB once, then cached…", 0);
   try {
     const started = performance.now();
-    gliner = await Gliner2.load(GLINER_MODEL, {
+    gliner = await Gliner2.load(FOXMIND_MODEL, {
       device: "webgpu",
       dtype: "fp16",
       progress_callback: (info) => {
@@ -138,7 +138,7 @@ async function loadGliner(): Promise<number> {
 async function setLlm(on: boolean) {
   await chrome.storage.local.set({ llm: on });
   if (!on) {
-    setModel("llm", "idle", "Off: types the values GLiNER finds in your goal");
+    setModel("llm", "idle", "Off: types the values foxmind finds in your goal");
     refreshRun();
     return;
   }
@@ -204,7 +204,7 @@ function render(view: AgentView) {
   }
   const log = list.parentElement!;
   log.scrollTop = log.scrollHeight;
-  $("clock-sub").textContent = `${view.history.length} actions · ${view.modelMs} ms in GLiNER2`;
+  $("clock-sub").textContent = `${view.history.length} actions · ${view.modelMs} ms in foxmind`;
   const result = $<HTMLParagraphElement>("result");
   const final = ["done", "blocked", "stopped", "error"].includes(view.status);
   result.hidden = !final;
@@ -562,7 +562,7 @@ runButton.addEventListener("click", async () => {
 });
 llmToggle.addEventListener("change", () => void setLlm(llmToggle.checked));
 
-/** GLiNER2's load time in ms. The panel shows a failure; `ready()` and `run()` report it. */
+/** foxmind's load time in ms. The panel shows a failure; `ready()` and `run()` report it. */
 const glinerLoad = loadGliner();
 glinerLoad.catch(() => {});
 

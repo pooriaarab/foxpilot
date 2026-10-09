@@ -42,7 +42,7 @@ export const KEY_FLOOR = 0.8;
 
 /** Types the extracted span for the requirement; dates go in as ISO. */
 export class SpanWriter implements FieldWriter {
-  readonly name = "GLiNER spans";
+  readonly name = "foxmind spans";
 
   constructor(
     private readonly parts: Part[],

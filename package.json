@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@10.11.0",
-  "description": "foxpilot: a browser agent that runs entirely in Firefox, with GLiNER2 (and an optional small LLM) on WebGPU",
+  "description": "foxpilot: a browser agent that runs entirely in Firefox, with foxmind, an on-device GLiNER2-based model (and an optional small LLM), on WebGPU",
   "type": "module",
   "bin": {
     "foxpilot": "bin/foxpilot.mjs"
