@@ -7,13 +7,13 @@ import type { HistoryEntry, Page } from "@foxpilot/core/page/types";
 import { verify } from "@foxpilot/agent/verify";
 import { Gliner2 } from "@foxpilot/core/model/gliner2";
 
-const ROOT = new URL("..", import.meta.url).pathname;
+const ROOT = new URL("../../..", import.meta.url).pathname;
 const have = existsSync(`${ROOT}dist-model/onnx/model.onnx`);
 env.allowRemoteModels = false;
 env.localModelPath = ROOT;
 
 const GOAL = "Find a one-way ticket from New York to San Francisco on October 9, 2026.";
-const load = (name: string) => (JSON.parse(readFileSync(`${ROOT}tests/fixtures/${name}.json`, "utf8")) as { state: Page }).state;
+const load = (name: string) => (JSON.parse(readFileSync(`${ROOT}packages/agent/tests/fixtures/${name}.json`, "utf8")) as { state: Page }).state;
 
 describe.skipIf(!have)("verify", () => {
   let model: Gliner2;

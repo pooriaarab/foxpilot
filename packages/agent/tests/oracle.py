@@ -1,14 +1,14 @@
 """Decisions from gliner2-ultrafast's Python controller on the captured snapshots.
 
 The TypeScript port must make the same decisions (tests/controller.test.ts).
-Usage: python tests/oracle.py  → tests/fixtures/oracle.json
+Usage: python packages/agent/tests/oracle.py  → packages/agent/tests/fixtures/oracle.json
 """
 import json
 import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent / "ref-ultrafast"))
+sys.path.insert(0, str(HERE.parents[2] / "ref-ultrafast"))
 from gliner_ultrafast.gliner import choose, requirements  # noqa: E402
 
 
