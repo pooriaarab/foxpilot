@@ -64,6 +64,16 @@ function below(element: Element): boolean {
   return [...element.querySelectorAll(CONTROLS)].some((e) => shown(e) && e.getBoundingClientRect().top >= edge - 1);
 }
 
+/** A link to another page, or to a new tab: the dialog's "Cookie policy". Pressing it leaves the dialog unanswered. */
+export function leaves(e: Element | undefined | null): boolean {
+  const link = e?.closest("a[href]") as HTMLAnchorElement | null;
+  if (!link) return false;
+  const href = link.getAttribute("href") ?? "";
+  if (href.startsWith("#") || /^javascript:/i.test(href)) return false;
+  const to = new URL(link.href, location.href);
+  return link.target === "_blank" || to.origin + to.pathname + to.search !== location.origin + location.pathname + location.search;
+}
+
 /**
  * The plan for one dialog. `actions` come from the page kit snapshot and
  * `nodeOf` maps an action to its element. Controls the user already pressed
@@ -76,7 +86,7 @@ export async function plan(
     .filter((a) => a.kind === "click" && element.contains(nodeOf(a) ?? null))
     .map((a) => {
       const label = tidy(a.label);
-      const pick = !a.offscreen && !firstDate(label) && !OPTION_ROLES.has(a.role ?? "") && !(pressed.has(a.node!) && !TOGGLES.has(a.role ?? ""));
+      const pick = !a.offscreen && !firstDate(label) && !OPTION_ROLES.has(a.role ?? "") && !(pressed.has(a.node!) && !TOGGLES.has(a.role ?? "")) && !leaves(nodeOf(a));
       return { label, action: { ...a }, pick };
     });
   const steps: Step[] = [];
