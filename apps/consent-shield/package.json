@@ -1,6 +1,6 @@
 {
   "name": "@foxpilot/app-consent-shield",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "Consent Shield, the add-on that refuses optional cookies and declines nag dialogs. The version that ships lives in public/manifest.json.",
