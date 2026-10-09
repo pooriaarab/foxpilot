@@ -1,0 +1,27 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>TCF-shaped dialog with a vendor layer</title>
+<p>A recipe for rye bread.</p>
+<div role="dialog" aria-modal="true" aria-label="Privacy" data-dialog style="position:fixed;top:10%;left:25%;width:420px;padding:12px;background:#fff;border:1px solid">
+  <div id="l1" data-box>
+    <p>We and our partners store and access information on your device, such as cookies, for personalised ads and content.</p>
+    <button>AGREE</button> <button data-show="l2">MORE OPTIONS</button>
+  </div>
+  <div id="l2" data-box hidden>
+    <h2>Purposes</h2>
+    <button role="switch" aria-checked="true" data-optional aria-label="Store and access information">On</button>
+    <button role="switch" aria-checked="true" data-optional aria-label="Personalised advertising">On</button>
+    <button role="switch" aria-checked="true" data-optional aria-label="Measure content performance">On</button>
+    <p><button data-show="l3">PARTNERS</button> <button>ACCEPT ALL</button> <button data-close>SAVE &amp; EXIT</button></p>
+  </div>
+  <div id="l3" data-box hidden>
+    <h2>Vendors</h2>
+    <ul style="max-height:60px;overflow:auto">
+      <li><label><input type="checkbox" data-optional checked> Vendor One</label></li>
+      <li><label><input type="checkbox" data-optional checked> Vendor Two</label></li>
+      <li><label><input type="checkbox" data-optional checked> Vendor Three</label></li>
+    </ul>
+    <button data-show="l2">Back</button>
+  </div>
+</div>
+<script src="kit.js"></script>
