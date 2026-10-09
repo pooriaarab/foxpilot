@@ -19,6 +19,10 @@ export type Action = {
   /** A password field: it takes only a password the ask dictates. */
   secret?: boolean;
   offscreen?: boolean;
+  /** A link's list item, row or card text, without the link name. */
+  blurb?: string;
+  /** A link in a breadcrumb trail. */
+  crumb?: boolean;
   self_link?: boolean;
   suggestion_for?: number;
   expanded?: string;
