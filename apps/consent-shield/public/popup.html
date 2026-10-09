@@ -4,9 +4,16 @@
     <meta charset="utf-8" />
     <meta name="color-scheme" content="light dark" />
     <title>Consent Shield</title>
+    <style>
+      body { font: 13px system-ui, sans-serif; width: 320px; margin: 10px; }
+      ol { padding-left: 18px; }
+      .muted { opacity: 0.7; }
+    </style>
   </head>
   <body>
-    <p>Consent Shield is on. It refuses optional cookies and declines nag dialogs.</p>
+    <p class="muted">Dry run: Consent Shield shows what it would press. It presses nothing.</p>
+    <label><input type="checkbox" id="off" /> Off on <span id="host">this site</span></label>
+    <ol id="log"></ol>
     <script type="module" src="popup.js"></script>
   </body>
 </html>
