@@ -21,7 +21,12 @@ const UNIT = "(seconds?|secs?|s|minutes?|mins?)";
 const BUDGET = new RegExp(`\\b(?:${CUE})\\b[^.;]{0,60}?\\b(\\d+(?:\\.\\d+)?)\\s*${UNIT}\\b`, "gi");
 const SEVERAL = /\b(?:several|a few|some) (?:seconds|minutes)\b/i;
 const ASKS_RETRY = /\b(retry|retries|try again|again|unreliable|flaky|fails?|failing)\b/i;
-const PROGRESS = /\b\d+\s*s(?:ec(?:ond)?s?)?\s+of\s+(?:about\s+)?\d+|\b(?:loading|please wait|in progress|processing|counting down|remaining|elapsed|pending)\b|…$|\.\.\.$/im;
+const READOUT = /\b\d+\s*s(?:ec(?:ond)?s?)?\s+of\s+(?:about\s+)?\d+/i;
+const PROGRESS = /\b(?:loading|please wait|in progress|processing|counting down|remaining|elapsed|pending)\b/i;
+/** A line that ends in an ellipsis after a verb in -ing ("Recomputing quarter…", "Saving..."). */
+const DOING = /^\s*\p{L}+ing\b.*(?:…|\.\.\.)\s*$/iu;
+/** Longer lines are prose: a handbook's "records-processing closure" is not a readout. */
+const STATUS_LENGTH = 80;
 const FAILURE = /\b(error|failed|failure|unavailable|timed? ?out|try again|could not|couldn.t|unable to|went wrong|HTTP 5\d\d)\b/i;
 const RETRY_LABEL = /\b(retry|try again|reattempt)\b/i;
 
@@ -39,9 +44,15 @@ export function budgetOf(ask: string): number {
   return Math.min(seconds * 1500, CEILING_MS);
 }
 
-/** True when the page shows work in progress: "3s of about 8s", "Loading…", "Processing". */
+/**
+ * True when a short status line shows work in progress: a readout ("3s of
+ * about 8s"), a progress word with a number or an ellipsis ("Processing 3 of
+ * 10", "Loading…"), or an -ing verb that trails off ("Recomputing quarter…").
+ * A progress word in prose or in a bare label ("Pending approval") is not one.
+ */
 export function working(text: string): boolean {
-  return PROGRESS.test(text);
+  return text.split("\n").some((line) => line.length <= STATUS_LENGTH &&
+    (READOUT.test(line) || DOING.test(line) || (PROGRESS.test(line) && /\d|…|\.\.\./.test(line))));
 }
 
 /** True when a status line is short and names a failure. Long prose is content, not a status. */

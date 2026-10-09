@@ -5,7 +5,7 @@
 // by side; tests/controller.test.ts checks the decisions match it.
 import { firstDate, resolveDate, sameDate, type IsoDate } from "./dates";
 import type { Action, HistoryEntry, Page } from "./types";
-import { destinationAsk, isSearchField } from "./search";
+import { destinationAsk, isSearchField, searchAsk } from "./search";
 import { parseAsk, properName, ruledOut } from "./ask";
 import { patience } from "./patience";
 import { acceptsAll, declining, refusing, stanceOf, type Control } from "./dialogs";
@@ -862,6 +862,24 @@ function idle(history: HistoryEntry[]): number {
   return count;
 }
 
+/**
+ * Zipline addition: a link to a place on this page ("#sec-22") scrolls to it.
+ * When a line in view holds two words of the ask that the link's own name
+ * lacks ("field audit logs"), the asked content is on screen, and a scroll
+ * would carry it away. Otherwise the run scrolls on toward it.
+ */
+function jumpedTo(state: Page, history: HistoryEntry[], parts: Part[]): boolean {
+  if (!/#[^/]+$/.test(state.url)) return false;
+  const jump = [...history].reverse().find((entry) => entry.kind !== "wait" && entry.kind !== "scroll");
+  if (jump?.kind !== "click") return false;
+  const named = contentWords(jump.action);
+  const asked = [...contentWords(parts.map((p) => p.text).join(" "))].filter((w) => !named.has(w));
+  return state.text.split("\n").some((line) => {
+    const words = contentWords(line);
+    return asked.filter((w) => words.has(w)).length >= 2;
+  });
+}
+
 /** One observation, one decision. */
 export async function choose(
   model: Scorer, state: Page, history: HistoryEntry[], memory: Memory, refused: Set<string>,
@@ -881,6 +899,14 @@ export async function choose(
   const committing = picked.length ? null : await suggestion(model, ordered, history, parts);
   chosen = committing ? [committing] : ((await dialog(model, ordered, chosen, history, allParts, rules)) ?? chosen);
   const commits = Boolean(committing);
+  // Zipline addition: an ask that says to use the site search searches first.
+  // A quick link that names the goal ("Form RV-7") skips the search the ask
+  // asked for, so links wait until something was typed. An open dialog still
+  // goes first, and a page with no search box still follows links.
+  if (searchAsk(goal) && !commits && !history.some((h) => h.kind === "fill") && !chosen.some((c) => execute(c.group).dialog)) {
+    const box = [...ordered.values()].find((g) => g.open && execute(g).kind === "fill" && isSearchField(execute(g)));
+    if (box) chosen = [{ requirement: null, score: 1.0, group: box }];
+  }
   // Zipline addition: when the ask names a page to reach, followLink alone
   // follows links. The other parts score site chrome ("Main Page", "All
   // Forms") as high as 0.9, and following them walks away from the page.
@@ -921,7 +947,7 @@ export async function choose(
     const waited = idle(history);
     const patient = patience(allParts.map((p) => p.text).join(" "), parts.length, state, history, (a) => !isUnsafe(a, rules));
     const wait = patient?.kind === "wait" || (history.length && waited < 2) ? control(state, "wait") : undefined;
-    const scroll = waited < 4 ? control(state, "scroll_down") : undefined;
+    const scroll = waited < 4 && !jumpedTo(state, history, allParts) ? control(state, "scroll_down") : undefined;
     if (patient?.kind === "retry") [choice, operation, confidence] = [patient.action.id, "CLICK", 1.0];
     else if (wait) [choice, operation, confidence] = [wait.id, "WAIT", 1.0];
     else if (scroll) [choice, operation, confidence] = [scroll.id, "SCROLL_DOWN", 1.0];

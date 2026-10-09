@@ -36,14 +36,23 @@ const CUT = new Set(["that", "which", "who", "where", "it", "you", "they", "we",
 const COUNTS: Record<string, number> = { both: 2, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
 const VAGUE = /^(?:it|them|this|that|what|what you see|what you find|the result|back)$/i;
 
+/** A report clause that points back: "Report both.", "Report them." */
+const BACK = /^(?:both|them|all|these|those|each)(?:\s+of\s+them)?[.!]?$/i;
+/** The sentence a back-pointing clause names: "Find the deadline and the URL …". */
+const FIND = /^(?:find|get|look\s+up|locate|note|check|read)\s+/i;
+
 /** The report clauses of the ask as slots, once each. Empty when the ask asks for nothing. */
 export function reportSlots(ask: string): Slot[] {
   const slots: Slot[] = [];
-  for (const sentence of ask.split(/(?<=[.!?])\s+/)) {
+  const sentences = ask.split(/(?<=[.!?])\s+/);
+  for (const [index, sentence] of sentences.entries()) {
     const verb = VERB.exec(sentence);
     if (!verb) continue;
     // "report its hours: the days it is open …" explains the slot after the colon.
-    const clause = sentence.slice(verb.index + verb[0].length).replace(/^:\s*/, "").split(/[;:]|,?\s+(?:then|before|after|once|when|if|so that|but)\b/i)[0]!;
+    let clause = sentence.slice(verb.index + verb[0].length).replace(/^:\s*/, "").split(/[;:]|,?\s+(?:then|before|after|once|when|if|so that|but)\b/i)[0]!;
+    // "Find the deadline and the URL of the page. Report both." reports what the find named.
+    const before = sentences[index - 1]?.trim() ?? "";
+    if (BACK.test(clause.trim()) && FIND.test(before)) clause = before.replace(FIND, "").replace(/[.!?]+$/, "");
     for (const part of clause.split(/\s*,\s*(?:and\s+)?|\s+and\s+/i)) {
       const words = part.replace(/[.!?:"“”]+$/g, "").replace(/^(?:report|tell\s+me|quote)\s+/i, "").replace(LEAD, "").split(/\s+/).filter(Boolean);
       if (!words.length || (CUT.has(words[0]!.toLowerCase()) && !/^(?:which|who|where)$/i.test(words[0]!))) continue;
@@ -54,7 +63,10 @@ export function reportSlots(ask: string): Slot[] {
       if (!phrase || VAGUE.test(phrase)) continue;
       const first = phrase.split(" ")[0]!.toLowerCase();
       const count = COUNTS[first] ?? (/^\d+$/.test(first) ? Number(first) : undefined);
-      const name = count === undefined ? phrase : phrase.split(" ").slice(1).join(" ");
+      let name = count === undefined ? phrase : phrase.split(" ").slice(1).join(" ");
+      // "what is the retention period … Report the period": the ask's fuller name is the slot.
+      const fuller = /^[\p{L}-]+$/u.test(name) && new RegExp(`\\b(?:the|a|an|its|your|their)\\s+([\\p{L}-]{3,})\\s+${name}\\b`, "iu").exec(ask)?.[1];
+      if (fuller && !CUT.has(fuller.toLowerCase()) && !LEAD.test(`${fuller} `)) name = `${fuller} ${name}`;
       if (!name || slots.some((s) => s.name.toLowerCase() === name.toLowerCase())) continue;
       slots.push({ phrase, name, kind: kindOf(name, count), ...(count === undefined ? {} : { count }) });
     }
@@ -154,20 +166,27 @@ function readPage(): Reading {
     const th = tr.querySelector('th'), td = tr.querySelector('td');
     if (th && td && visible(tr)) pair(words(th), words(td));
   }
-  const blocks: string[] = [];
+  // Up to 400 blocks are read and the 80 nearest the viewport kept, in page
+  // order: a link to "#sec-22" scrolled to the asked section, deep in the page.
+  const found: { text: string; away: number }[] = [];
   const visit = (e: Element) => {
-    if (blocks.length >= 80 || e.matches(skip) || e.matches(chromeParts) || !visible(e)) return;
+    if (found.length >= 400 || e.matches(skip) || e.matches(chromeParts) || !visible(e)) return;
     const length = (e.textContent || '').trim().length;
     if (!length) return;
     if (length > 300 && e.children.length) { for (const child of e.children) visit(child); return; }
     const text = words(e);
-    if (text.length >= 2) blocks.push(text.slice(0, 300));
+    if (text.length >= 2) {
+      const r = e.getBoundingClientRect();
+      found.push({ text: text.slice(0, 300), away: Math.max(0, -r.bottom, r.top - innerHeight) });
+    }
     for (const line of ((e as HTMLElement).innerText || '').split('\n')) {
       const m = /^\s*([^:]{2,40}):\s*(\S.{0,159})$/.exec(line);
       if (m) pair(m[1]!.trim(), m[2]!.trim());
     }
   };
   visit(document.body);
+  const near = new Set(found.map((b, i) => ({ ...b, i })).sort((a, b) => a.away - b.away || a.i - b.i).slice(0, 80).map((b) => b.i));
+  const blocks = found.filter((_, i) => near.has(i)).map((b) => b.text);
 
   const lists: Reading['lists'] = [];
   for (const l of document.querySelectorAll('ul,ol,[role="list"]')) {
@@ -201,8 +220,12 @@ export class Reporter {
   private steps = -1;
   private calls = 0;
 
+  /** The ask's words: among blocks that name a slot equally, the one nearer the ask comes first. */
+  private asked: string;
+
   constructor(private model: Scorer, private browser: TabBrowser, ask: string) {
     this.slots = reportSlots(ask);
+    this.asked = ask;
   }
 
   /** Reads the page once per action. Asks without a report clause cost nothing. */
@@ -263,8 +286,9 @@ export class Reporter {
         if (value) return value;
       }
     }
-    const ranked = page.blocks.map((text, i) => ({ text, i, score: overlap(slot, text) }))
-      .sort((a, b) => b.score - a.score || a.i - b.i).slice(0, 6);
+    const context = { ...slot, name: this.asked };
+    const ranked = page.blocks.map((text, i) => ({ text, i, score: overlap(slot, text), near: overlap(context, text) }))
+      .sort((a, b) => b.score - a.score || b.near - a.near || a.i - b.i).slice(0, 6);
     for (const block of ranked) {
       const value = await this.span(slot, block.text, false);
       if (value) return value;

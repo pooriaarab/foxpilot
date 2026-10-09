@@ -35,7 +35,8 @@ export function searchAsk(goal: string): string | null {
   if (!found) return null;
   const rest = goal.slice(found.index + found[0].length);
   const quoted = /["“]([^"”]{2,})["”]/.exec(rest);
-  const object = quoted ? quoted[1]! : rest.split(/[.;!?](?:\s|$)|,\s*(?:and\s+)?then\b|\s+and\s+then\b|\s+then\s/i)[0]!;
+  // An aside in brackets ("(careful: NOT Form RV-7A …)") is not part of the query.
+  const object = quoted ? quoted[1]! : rest.split(/[.;!?](?:\s|$)|\s*\(|,\s*(?:and\s+)?then\b|\s+and\s+then\b|\s+then\s/i)[0]!;
   return searchQuery(object) || null;
 }
 
