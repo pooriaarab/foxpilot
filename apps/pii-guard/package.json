@@ -1,0 +1,10 @@
+{
+  "name": "@foxpilot/app-pii-guard",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "PII Guard, the add-on that checks messages on AI chat sites before you send them. The version that ships lives in public/manifest.json.",
+  "dependencies": {
+    "@foxpilot/core": "workspace:*"
+  }
+}
