@@ -32,11 +32,11 @@ The tab that foxpilot drives goes into a **foxpilot** tab group. The group title
 
 ```bash
 pnpm install
-pnpm build            # writes dist/
+pnpm build            # writes dist/foxpilot/
 ```
 
 1. In Firefox, open `about:debugging#/runtime/this-firefox`.
-2. Click **Load Temporary Add-on** and choose `dist/manifest.json`.
+2. Click **Load Temporary Add-on** and choose `dist/foxpilot/manifest.json`.
 3. Click the foxpilot toolbar button to open the sidebar. On the first run, GLiNER2 downloads (614 MB) and is cached. The download happens once.
 4. Pick an example (it opens the page), or type your own goal for the current tab. Then click **Run**.
 
@@ -83,7 +83,7 @@ The server writes logs to stderr. Run `node scripts/mcp-smoke.mjs` to test it. T
 
 - `main` is staging.
 - `release` is production. To release, merge `main` into `release`. The release workflow signs the `.xpi` with AMO (addons.mozilla.org).
-- A release needs a version bump in `public/manifest.json`. The workflow fails when tag `v<version>` already exists.
+- A release needs a version bump in `apps/foxpilot/public/manifest.json`. The workflow fails when tag `v<version>` already exists.
 
 ## Credits
 

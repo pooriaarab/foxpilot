@@ -47,6 +47,6 @@ function icon(size) {
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", ihdr), chunk("IDAT", deflateSync(raw)), chunk("IEND", Buffer.alloc(0))]);
 }
 
-mkdirSync(new URL("../public/icons/", import.meta.url), { recursive: true });
-for (const size of [16, 32, 48, 128]) writeFileSync(new URL(`../public/icons/icon-${size}.png`, import.meta.url), icon(size));
+mkdirSync(new URL("../apps/foxpilot/public/icons/", import.meta.url), { recursive: true });
+for (const size of [16, 32, 48, 128]) writeFileSync(new URL(`../apps/foxpilot/public/icons/icon-${size}.png`, import.meta.url), icon(size));
 console.log("icons written");
