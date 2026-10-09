@@ -11,7 +11,7 @@
     </style>
   </head>
   <body>
-    <p class="muted">Dry run: Consent Shield shows what it would press. It presses nothing.</p>
+    <p class="muted">Consent Shield refuses optional consent and declines nag dialogs on each page. It never presses &ldquo;Accept all&rdquo;. When a step fails, it stops and leaves the page as it is.</p>
     <label><input type="checkbox" id="off" /> Off on <span id="host">this site</span></label>
     <ol id="log"></ol>
     <script type="module" src="popup.js"></script>
