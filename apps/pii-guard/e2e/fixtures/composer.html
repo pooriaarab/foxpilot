@@ -1,0 +1,42 @@
+<!doctype html>
+<!-- A chat composer for the PII Guard E2E. ?kind=textarea|contenteditable|prosemirror.
+     "prosemirror" re-renders its paragraphs on each input, as ProseMirror does.
+     #reset replaces the composer element, as a chat site does on "New chat". -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Composer fixture</title>
+    <style>
+      body { font: 16px/1.5 system-ui, sans-serif; margin: 40px; }
+      #composer { width: 640px; min-height: 96px; padding: 12px; border: 1px solid #888; border-radius: 12px; font: inherit; }
+    </style>
+  </head>
+  <body>
+    <button id="reset">New chat</button>
+    <div id="slot"></div>
+    <script>
+      const kind = new URLSearchParams(location.search).get("kind") ?? "textarea";
+      function render(el, text) {
+        el.replaceChildren(...text.split("\n").map((line) => Object.assign(document.createElement("p"), { textContent: line })));
+        const range = document.createRange();
+        range.selectNodeContents(el.lastChild);
+        range.collapse(false);
+        getSelection().removeAllRanges();
+        getSelection().addRange(range);
+      }
+      function reset() {
+        const el = document.createElement(kind === "textarea" ? "textarea" : "div");
+        el.id = "composer";
+        if (kind !== "textarea") el.contentEditable = "true";
+        if (kind === "prosemirror") {
+          el.className = "ProseMirror";
+          el.addEventListener("input", () => render(el, el.innerText.replace(/\n$/, "")));
+        }
+        document.getElementById("slot").replaceChildren(el);
+        el.focus();
+      }
+      document.getElementById("reset").addEventListener("click", reset);
+      reset();
+    </script>
+  </body>
+</html>
