@@ -3,7 +3,7 @@
 // and a screenshot to artifacts/. The JSON holds the RunResult: per-step
 // timing, refused decisions and executeScript counts per function. Exit code
 // 0 only when the panel verifies the goal.
-// Usage: pnpm e2e [flights|maps|walking] [--llm] [--headless] [--dry-run]
+// Usage: pnpm e2e [flights|maps|walking] [--llm] [--record] [--headless] [--dry-run]
 // Env: FIREFOX (binary path), GOAL and URL (a custom task).
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
@@ -18,6 +18,7 @@ const TASKS = {
 const args = process.argv.slice(2);
 const task = args.find((a) => !a.startsWith("--")) ?? "flights";
 const useLlm = args.includes("--llm");
+const recording = args.includes("--record");
 const headless = args.includes("--headless");
 const [url, goal] = process.env.GOAL ? [process.env.URL ?? TASKS.flights[0], process.env.GOAL] : TASKS[task] ?? [];
 if (!goal) {
@@ -50,7 +51,7 @@ try {
   const tabId = await session.openTask(url);
   ({ modelLoadMs: record.modelLoadMs } = await session.ready());
   console.log(`gliner: loaded in ${(record.modelLoadMs / 1000).toFixed(1)} s`);
-  const result = await session.run(goal, { tabId, llm: useLlm });
+  const result = await session.run(goal, { tabId, llm: useLlm, record: recording });
   // The task's url stays the record's url; where the run ended is finalUrl.
   Object.assign(record, result, { url, finalUrl: result.url });
   record.states = await session.states().catch((e) => `unread: ${e.message}`);

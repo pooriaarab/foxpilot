@@ -1,6 +1,7 @@
 // Port of gliner2-ultrafast agent.py (MIT): the agent loop. Observe, choose,
 // act, record; typed choices, observable state, bounded execution.
 import { parseAsk } from "./ask";
+import type { ModelCall } from "../model/gliner2";
 import { TabBrowser, StalePage } from "./browser";
 import { choose, requirements, sends, type Decision, type Memory, type Part, type Scorer } from "./controller";
 import { firstDate, normalise } from "./dates";
@@ -120,6 +121,7 @@ export class Agent {
     private readonly onUpdate: (view: AgentView) => void,
     private readonly surfaces: SpansFound,
     private readonly rules: Policy,
+    private readonly calls: ModelCall[] | null,
   ) {
     this.view = { status: "ready", goal, parts, history: [], decision: null, textCalls: [], refusals: [], elapsedMs: 0, modelMs: 0 };
   }
@@ -128,6 +130,7 @@ export class Agent {
   static async create(
     model: Scorer, browser: TabBrowser, goal: string,
     makeWriter: (parts: Part[], found: SpansFound, model: Scorer) => FieldWriter, onUpdate: (view: AgentView) => void,
+    calls: ModelCall[] | null = null,
   ): Promise<Agent> {
     const task = goal.trim();
     if (!task) throw new Error("Type a goal first");
@@ -146,7 +149,7 @@ export class Agent {
     const parts = await requirements(values.length ? task : stripQualifiers(task) || task, recording);
     // A dictated value is typed as written, not as GLiNER2 cased its span.
     for (const value of values) found.set(value.value.toLowerCase(), value.value);
-    const agent = new Agent(model, browser, task, parts, makeWriter(parts, found, model), onUpdate, found, policy(task));
+    const agent = new Agent(model, browser, task, parts, makeWriter(parts, found, model), onUpdate, found, policy(task), calls);
     // A page that just loaded may not have drawn its controls yet (a site
     // opened for the goal); give it up to 3 s before judging it.
     agent.page = await browser.observe();
@@ -235,8 +238,16 @@ export class Agent {
       },
     };
     const started = performance.now();
+    const mark = this.calls?.length ?? 0;
     const decision = await choose(counted, this.page, this.view.history, this.memory, this.refused, this.parts, this.served, this.view.goal, this.rules);
     const decide = Math.round(performance.now() - started);
+    // Training data: tie each call this decision made to what it chose.
+    if (this.calls) {
+      const step = this.view.history.length + 1;
+      for (const call of this.calls.slice(mark)) {
+        call.decision = { step, choice: decision.choice, operation: decision.operation, target: decision.target, requirement: decision.requirement };
+      }
+    }
     this.timing = { decide, calls: stats.calls, model: Math.round(stats.model), labels: stats.labels, act: 0, observe: 0 };
     this.view.modelMs += decision.latencyMs;
     this.view.decision = decision;
