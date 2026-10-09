@@ -1,7 +1,7 @@
 // Port of gliner2-ultrafast agent.py (MIT): the agent loop. Observe, choose,
 // act, record; typed choices, observable state, bounded execution.
 import { parseAsk } from "./ask";
-import type { ModelCall } from "../model/gliner2";
+import type { ModelCall } from "@foxpilot/core/model/gliner2";
 import { TabBrowser, StalePage } from "./browser";
 import { choose, requirements, sends, type Decision, type Memory, type Part, type Scorer } from "./controller";
 import { firstDate, normalise } from "./dates";

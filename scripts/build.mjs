@@ -9,7 +9,7 @@ const dist = join(root, "dist");
 const watch = process.argv.includes("--watch");
 
 // ONNX Runtime's wasm must ship inside the extension (MV3 blocks remote code).
-const transformersDir = realpathSync(join(root, "node_modules/@huggingface/transformers"));
+const transformersDir = realpathSync(join(root, "packages/core/node_modules/@huggingface/transformers"));
 const ortDist = join(transformersDir, "../../onnxruntime-web/dist");
 if (!existsSync(ortDist)) throw new Error(`onnxruntime-web not found at ${ortDist}`);
 

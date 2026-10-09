@@ -47,7 +47,7 @@ if (BROWSER === "firefox" && !existsSync(FIREFOX)) {
 }
 
 // Bundle the bench page, and take ONNX Runtime's wasm from node_modules.
-const transformersDir = realpathSync(join(root, "node_modules/@huggingface/transformers"));
+const transformersDir = realpathSync(join(root, "packages/core/node_modules/@huggingface/transformers"));
 const ortDist = join(transformersDir, "../../onnxruntime-web/dist");
 const site = mkdtempSync(join(tmpdir(), "foxpilot-bench-site-"));
 await esbuild.build({
