@@ -1,7 +1,7 @@
 // settle() in Chromium: after a picker's "Done", the page is read once the picker has gone.
 import { chromium, type Browser } from "playwright";
 import { afterAll, beforeAll, expect, it } from "vitest";
-import { settle } from "../src/agent/settle";
+import { settle } from "@foxpilot/core/page/settle";
 
 let browser: Browser;
 beforeAll(async () => { browser = await chromium.launch(); });

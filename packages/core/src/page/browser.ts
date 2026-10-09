@@ -9,7 +9,7 @@
 // window.__glinerFast cache stays between calls. The page kit (kit.ts) is
 // injected once per document and answers calls over a runtime.Port.
 import { KIT_PORT, type Action, type Page } from "./types";
-import { MASK } from "./policy";
+import { MASK } from "../text/policy";
 import type { Kit, KitCall, KitReply } from "./kit";
 
 export class StalePage extends Error {}

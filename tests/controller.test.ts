@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { env } from "@huggingface/transformers";
 import { describe, expect, it } from "vitest";
 import { choose, requirements, type Part } from "../src/agent/controller";
-import type { HistoryEntry, Page } from "../src/agent/types";
+import type { HistoryEntry, Page } from "@foxpilot/core/page/types";
 import { Gliner2 } from "@foxpilot/core/model/gliner2";
 
 type OracleCase = {

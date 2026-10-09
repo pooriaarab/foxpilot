@@ -2,7 +2,7 @@
 // Usage: node tests/capture.mjs  → tests/fixtures/*.json
 import { writeFileSync } from "node:fs";
 import { chromium } from "playwright";
-import { snapshot } from "../src/agent/snapshot.js";
+import { snapshot } from "@foxpilot/core/page/snapshot.js";
 
 const out = (name, state, extra = {}) => {
   writeFileSync(new URL(`fixtures/${name}.json`, import.meta.url), JSON.stringify({ ...extra, state }, null, 1));

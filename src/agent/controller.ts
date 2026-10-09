@@ -3,13 +3,13 @@
 // progress, dates and supported operations; the model supplies entity spans
 // and control scores. Function names follow the Python so the two read side
 // by side; tests/controller.test.ts checks the decisions match it.
-import { firstDate, resolveDate, sameDate, type IsoDate } from "./dates";
-import type { Action, HistoryEntry, Page } from "./types";
+import { firstDate, resolveDate, sameDate, type IsoDate } from "@foxpilot/core/text/dates";
+import type { Action, HistoryEntry, Page } from "@foxpilot/core/page/types";
 import { destinationAsk, isSearchField, searchAsk } from "./search";
-import { parseAsk, properName, ruledOut } from "./ask";
+import { parseAsk, properName, ruledOut } from "@foxpilot/core/text/ask";
 import { patience } from "./patience";
 import { acceptsAll, declining, refusing, stanceOf, type Control } from "./dialogs";
-import { blocks, CLOSED, type Policy } from "./policy";
+import { blocks, CLOSED, type Policy } from "@foxpilot/core/text/policy";
 
 export type Labels = Record<string, string | undefined>;
 

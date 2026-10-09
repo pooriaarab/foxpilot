@@ -35,7 +35,7 @@ const common = {
 const entries = [
   { entryPoints: { sidepanel: "src/panel/sidepanel.ts" } },
   { entryPoints: { background: "src/background/background.ts" } },
-  { entryPoints: { kit: "src/agent/kit.ts" }, format: "iife" },
+  { entryPoints: { kit: "packages/core/src/page/kit.ts" }, format: "iife" },
 ];
 for (const entry of entries) {
   const config = { ...common, ...entry };

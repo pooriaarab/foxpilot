@@ -7,7 +7,7 @@ import { env } from "@huggingface/transformers";
 import { chromium, type Browser, type Page } from "playwright";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { findAnswer, lastRows } from "../src/agent/answer";
-import type { TabBrowser } from "../src/agent/browser";
+import type { TabBrowser } from "@foxpilot/core/page/browser";
 import { Gliner2 } from "@foxpilot/core/model/gliner2";
 
 const ROOT = new URL("..", import.meta.url).pathname;

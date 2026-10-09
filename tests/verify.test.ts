@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { env } from "@huggingface/transformers";
 import { beforeAll, describe, expect, it } from "vitest";
 import { requirements, type Part } from "../src/agent/controller";
-import type { HistoryEntry, Page } from "../src/agent/types";
+import type { HistoryEntry, Page } from "@foxpilot/core/page/types";
 import { verify } from "../src/agent/verify";
 import { Gliner2 } from "@foxpilot/core/model/gliner2";
 
