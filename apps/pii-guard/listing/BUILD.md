@@ -56,6 +56,8 @@ The model is foxmind-small, a GLiNER2.5 small model exported to ONNX and quantiz
 
 The pinned commit is `bcd5cdcaa66a4d8b16ed22e4a9858becc9f7e4d7`. `scripts/fetch-model.mjs` downloads each file from `https://huggingface.co/pooria/foxmind-small/resolve/<commit>/<file>` into `~/.cache/foxpilot/models/pooria/foxmind-small@<commit>/`. Then it checks each sha256. If a file does not match, the script deletes it and the build fails. To fetch the model alone, run `node scripts/fetch-model.mjs foxmind-small`.
 
+The build writes the `.json` files minified (`JSON.stringify(JSON.parse(file))`), so the packaged files do not match the sha256 values above. The checks run on the downloaded files, before the build minifies them. AMO does not parse text files over 5 MB, and the indented `tokenizer.json` is 8.3 MB. To check a packaged JSON file, minify the downloaded file in the same way and compare the result. `diff -r` below compares the packaged files directly.
+
 At run time the add-on loads the model from inside the package only. `packages/core/src/model/load.ts` sets `env.allowRemoteModels = false` for a bundled model.
 
 ## Compare the output with the submitted package

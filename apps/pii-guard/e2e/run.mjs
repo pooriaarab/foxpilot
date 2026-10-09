@@ -222,6 +222,7 @@ try {
   const idle = await check(tab, KINDS.at(-1), messages[0]);
   timing.afterIdleUnloadMs = idle.modelMs;
   timing.idleState = idle.state;
+  timing.idleError = idle.modelError;
   for (const kind of KINDS) {
     await tab.goto(`${base}?kind=${kind}`, { waitUntil: "load" });
     await sendFlow(tab, kind);
