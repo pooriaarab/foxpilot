@@ -79,6 +79,18 @@ function isOn(e: Element): boolean {
   return box ? (box as HTMLInputElement).checked : e.getAttribute("aria-checked") === "true";
 }
 
+/** Labels that store the choices as they stand ("Confirm my choices"), not ones that refuse. */
+const SAVES = /\b(?:save|confirm|submit|apply)\b/i;
+
+/** The optional switches in the dialog that are still on, by name. Saving now would give consent. */
+function stillOn(element: Element): string[] {
+  const named = (e: Element) => [e.getAttribute("aria-label"), ...(e.getAttribute("aria-labelledby") ?? "").split(/\s+/).map((id) => id && document.getElementById(id)?.textContent),
+    ...[...((e as HTMLInputElement).labels ?? [])].map((l) => l.textContent)].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+  return [...element.querySelectorAll('input[type="checkbox"], [role="switch"], [role="checkbox"]')]
+    .filter((e) => isOn(e) && !e.matches(":disabled") && e.getAttribute("aria-disabled") !== "true")
+    .map(named).filter((name) => !required(name));
+}
+
 /** Does one step. Returns why it failed, or "" when it worked. */
 async function attempt(element: Element, step: Step): Promise<string> {
   if (++steps > STEP_CAP) return "step limit";
@@ -96,6 +108,7 @@ async function attempt(element: Element, step: Step): Promise<string> {
   const name = `${step.label} ${target.getAttribute("aria-label") ?? ""} ${target.textContent ?? ""}`;
   if (step.kind === "toggle" ? !isOn(target) || required(name) : acceptsAll(name)) return `refused to press "${step.label}"`;
   if (leaves(target)) return `refused to follow the link "${step.label}"`;
+  if (step.kind === "press" && SAVES.test(step.label) && stillOn(element).length) return `refused to save with "${stillOn(element)[0]}" on`;
   // Bring the control to the middle, clear of a sticky button bar at the dialog's edge.
   target.scrollIntoView({ block: "center" });
   await new Promise((resolve) => setTimeout(resolve, 50));
