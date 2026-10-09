@@ -5,7 +5,7 @@
 //   gliner2-ultrafast's text helper but without leaving the browser.
 // Either may refuse; the agent then stops offering that field.
 import { pipeline, type TextGenerationPipeline } from "@huggingface/transformers";
-import { reshape } from "./ask";
+import { reshape } from "@foxpilot/core/text/ask";
 import type { Labels, Part, Scorer } from "./controller";
 import { isSearchField, searchAsk, searchQuery } from "./search";
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalise, relativeDate, resolveDate } from "../src/agent/dates";
+import { normalise, relativeDate, resolveDate } from "@foxpilot/core/text/dates";
 import { qualifiers } from "../src/agent/pick";
 
 // Friday, September 25, 2026 (local time, as the extension sees it).

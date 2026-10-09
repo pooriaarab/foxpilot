@@ -3,7 +3,7 @@
 // backend all look like "nothing to do". Ending the run there reports too
 // early. This code holds the run, with a time budget, and never acts while it
 // holds. It reads the history and the page text only; it makes no model call.
-import type { Action, HistoryEntry, Page } from "./types";
+import type { Action, HistoryEntry, Page } from "@foxpilot/core/page/types";
 
 /** The longest the run holds with no number in the ask. */
 const READOUT_MS = 20_000;

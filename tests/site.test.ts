@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { choose, nearlyNames, type Part } from "../src/agent/controller";
 import { searchQuery } from "../src/agent/search";
-import { onSite, siteIn, withoutSite } from "../src/agent/site";
-import type { HistoryEntry, Page } from "../src/agent/types";
+import { onSite, siteIn, withoutSite } from "@foxpilot/core/page/site";
+import type { HistoryEntry, Page } from "@foxpilot/core/page/types";
 
 /** A test scorer's batched call: the same answers as one call per text. */
 const batched = <T extends { classify: (t: string, n: string, l: Record<string, unknown>) => Promise<Record<string, number>> }>(m: T) =>
