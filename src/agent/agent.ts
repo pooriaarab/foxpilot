@@ -1,16 +1,16 @@
 // Port of gliner2-ultrafast agent.py (MIT): the agent loop. Observe, choose,
 // act, record; typed choices, observable state, bounded execution.
-import { parseAsk } from "./ask";
+import { parseAsk } from "@foxpilot/core/text/ask";
 import type { ModelCall } from "@foxpilot/core/model/gliner2";
-import { TabBrowser, StalePage } from "./browser";
+import { TabBrowser, StalePage } from "@foxpilot/core/page/browser";
 import { choose, requirements, sends, type Decision, type Memory, type Part, type Scorer } from "./controller";
-import { firstDate, normalise } from "./dates";
-import { MASK, policy, type Policy } from "./policy";
+import { firstDate, normalise } from "@foxpilot/core/text/dates";
+import { MASK, policy, type Policy } from "@foxpilot/core/text/policy";
 import { Refused, type FieldContext, type FieldWriter } from "./fieldtext";
 import { searchQuery } from "./search";
 import { stripQualifiers } from "./pick";
 import { working } from "./patience";
-import type { Action, HistoryEntry, Page } from "./types";
+import type { Action, HistoryEntry, Page } from "@foxpilot/core/page/types";
 import { corrections, verify, type Refill, type Verdict } from "./verify";
 
 export const MAX_STEPS = 60;

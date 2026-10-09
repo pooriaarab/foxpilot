@@ -6,10 +6,10 @@
 // no value ("one-way ticket") and recognises error, captcha and empty pages;
 // matching is literal, like the controller's, except on a field the page
 // renamed after the agent committed it.
-import { parseAsk } from "./ask";
+import { parseAsk } from "@foxpilot/core/text/ask";
 import { nearlyNames, namesValue, unsentForms, type Part, type Scorer } from "./controller";
-import { firstDate } from "./dates";
-import type { Action, HistoryEntry, Page } from "./types";
+import { firstDate } from "@foxpilot/core/text/dates";
+import type { Action, HistoryEntry, Page } from "@foxpilot/core/page/types";
 
 export type Check = { part: string; ok: boolean; evidence: string };
 export type Verdict = { verified: boolean; checks: Check[]; problem?: string };

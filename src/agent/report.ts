@@ -6,7 +6,7 @@
 // label/value pairs that name the slot; the page title or URL; the first
 // item of each list for "#1" or "top"; the rest of the page. GLiNER2 takes
 // the span; patterns check codes, money and dates.
-import { nameInjected, type TabBrowser } from "./browser";
+import { nameInjected, type TabBrowser } from "@foxpilot/core/page/browser";
 import type { Scorer } from "./controller";
 import type { Answer } from "./answer";
 
