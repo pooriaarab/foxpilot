@@ -6,6 +6,9 @@
 //
 // One listener on the document finds the composer from each input event, so a
 // site that replaces its composer element needs no new listener.
+//
+// When marked spans exist, Enter and the site's send button stop in the capture
+// phase, and a prompt offers "Redact and send", "Send anyway" or "Cancel".
 import { remoteScorer } from "@foxpilot/core/model/host";
 import type { Labels } from "@foxpilot/core/model/scorer";
 import { SHAPES, type Kind } from "@foxpilot/core/text/ask";
@@ -35,6 +38,14 @@ const ID_BEFORE = /\b(?:id|passport|licen[cs]e|ssn|social security|insurance|acc
 const SHAPE_TYPE: Partial<Record<Kind, string>> = {
   email: "email", card: "card number", phone: "phone", cvv: "card number", expiry: "card number", zip: "street address", code: "ID number",
 };
+/** Redact puts [TAG_n] in place of each span. One value keeps one number. */
+const TAGS: Record<string, string> = {
+  "person name": "NAME", email: "EMAIL", phone: "PHONE", "card number": "CARD", "street address": "ADDRESS", "ID number": "ID", "date of birth": "DOB", "health condition": "HEALTH",
+};
+/** The send button on the supported sites (ChatGPT: data-testid; Claude, Gemini: "Send message"; Copilot, Perplexity: "Submit"). */
+const SEND = '[data-testid="send-button"], button[aria-label*="send" i], button[aria-label*="submit" i]';
+/** After a guarded send, the prompt waits this long at most for the model (warm call about 205 ms). */
+const WAIT_MS = 400;
 const BLOCKS = new Set(["P", "DIV", "LI", "BR", "H1", "H2", "H3", "H4", "H5", "H6", "PRE", "BLOCKQUOTE"]);
 
 const scorer = remoteScorer();
@@ -47,6 +58,11 @@ let seq = 0;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let pending: Composer | undefined;
 let sentCount = -1;
+/** The send that waits for the user's choice. */
+let held: { composer: Composer; replay: () => void } | undefined;
+let replaying = false;
+let host: HTMLDivElement | undefined;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** The editable element an input event came from, or null. */
 function composerOf(target: EventTarget | null): Composer | null {
@@ -255,3 +271,170 @@ const redraw = () => {
 new MutationObserver(redraw).observe(document.body, { childList: true, subtree: true, characterData: true });
 addEventListener("scroll", redraw, true);
 addEventListener("resize", redraw);
+
+type Choice = "redact" | "send" | "cancel";
+type Now = { text: string; spans: Span[]; answered: boolean };
+
+/** Keeps the longest of overlapping spans, so a redaction never cuts into another one. */
+function disjoint(spans: Span[]): Span[] {
+  const kept: Span[] = [];
+  for (const s of [...spans].sort((a, b) => b.end - b.start - (a.end - a.start))) {
+    if (kept.every((k) => s.end <= k.start || s.start >= k.end)) kept.push(s);
+  }
+  return kept.sort((a, b) => a.start - b.start);
+}
+
+/**
+ * The spans for the composer text now. When the model has not answered for this text, the shape
+ * spans count, plus earlier model spans whose text is still at the same place.
+ */
+function spansNow(composer: Composer): Now {
+  const { text } = read(composer);
+  const mine = current?.composer === composer ? current : undefined;
+  if (mine?.text === text) return { text, spans: mine.spans, answered: layer.dataset.state === "model" || layer.dataset.state === "shapes-only" };
+  const kept = (mine?.spans ?? []).filter((s) => s.by === "model" && text.slice(s.start, s.end) === s.text);
+  return { text, spans: disjoint([...shapes(text), ...kept]), answered: false };
+}
+
+/**
+ * Stops a send when the composer has marked spans. A send with no spans goes on at once, with no wait.
+ * The choice to stop is made on the spans known now: the shape spans, or the model's when it answered.
+ * The model only waits (WAIT_MS at most) after the send stops, to add names to the prompt. So a message
+ * with a name and no shape, sent before the model answers (about 0.5 s after the last key), is not stopped.
+ */
+function guard(event: Event, composer: Composer, replay: () => void) {
+  if (replaying) return;
+  if (!held) {
+    const now = spansNow(composer);
+    if (!now.spans.length) return;
+    held = { composer, replay };
+    void decide(held, now);
+  }
+  event.preventDefault();
+  event.stopImmediatePropagation();
+}
+
+async function decide(send: NonNullable<typeof held>, now: Now) {
+  let { spans } = now;
+  if (!now.answered) {
+    clearTimeout(timer);
+    await Promise.race([detect(send.composer), sleep(WAIT_MS)]);
+    const later = spansNow(send.composer);
+    if (later.answered && later.text === now.text) spans = disjoint([...spans, ...later.spans]);
+  }
+  let note = "";
+  for (;;) {
+    const choice = await choose(send.composer, spans, note);
+    if (choice === "redact") {
+      redact(send.composer, disjoint(spans));
+      // Give the site one frame to take the change into its own state.
+      await new Promise((r) => requestAnimationFrame(r));
+      const after = read(send.composer).text;
+      if (after === now.text || spans.some((s) => after.includes(s.text))) {
+        layer.dataset.decision = "redact-failed";
+        note = "PII Guard could not change the text in this composer. Edit it yourself, or choose below.";
+        continue;
+      }
+    }
+    held = undefined;
+    layer.dataset.decision = choice;
+    send.composer.focus();
+    if (choice === "cancel") return;
+    replaying = true;
+    try {
+      send.replay();
+    } finally {
+      replaying = false;
+    }
+    return;
+  }
+}
+
+function tagged(spans: Span[]): { tag: string; span: Span }[] {
+  const named = new Map<string, string>();
+  const counts: Record<string, number> = {};
+  return spans.map((span) => {
+    const type = TAGS[span.type] ?? "PII";
+    const key = `${type}:${span.text}`;
+    if (!named.has(key)) named.set(key, `[${type}_${(counts[type] = (counts[type] ?? 0) + 1)}]`);
+    return { tag: named.get(key)!, span };
+  });
+}
+
+/** Puts a tag in place of each span, last span first so the earlier offsets stay true. */
+function redact(composer: Composer, spans: Span[]) {
+  const swaps = tagged(spans).reverse();
+  if (isField(composer)) {
+    let value = composer.value;
+    for (const { tag, span } of swaps) value = value.slice(0, span.start) + tag + value.slice(span.end);
+    // The prototype setter: a framework that wraps the element's own setter (React) then sees the input event as a change.
+    const proto = composer instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(proto, "value")?.set?.call(composer, value);
+    composer.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertReplacementText" }));
+    return;
+  }
+  composer.focus();
+  const selection = getSelection();
+  for (const { tag, span } of swaps) {
+    const range = rangeFor(composer, span);
+    if (!range || !selection) continue;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    // insertText fires beforeinput and input, so ProseMirror and other editors update their own state.
+    document.execCommand("insertText", false, tag);
+  }
+}
+
+/** Shows the choice over the composer, in a shadow root in the layer, and waits for it. Escape cancels. */
+function choose(composer: Composer, spans: Span[], note: string): Promise<Choice> {
+  if (!layer.isConnected) document.documentElement.append(layer);
+  host ??= Object.assign(layer.appendChild(document.createElement("div")), { className: "pii-prompt" });
+  const root = host.shadowRoot ?? host.attachShadow({ mode: "open" });
+  const box = composer.getBoundingClientRect();
+  const panel = document.createElement("div");
+  panel.setAttribute("role", "dialog");
+  panel.setAttribute("aria-label", "PII Guard");
+  panel.style.cssText = `position:fixed;left:${Math.max(8, box.left)}px;top:${Math.max(8, box.top - 8)}px;transform:translateY(-100%);` +
+    "pointer-events:auto;max-width:420px;padding:10px 12px;border-radius:10px;background:#fff;color:#15141a;" +
+    "box-shadow:0 2px 12px rgba(0,0,0,.25);font:14px/1.4 system-ui,sans-serif;";
+  const text = panel.appendChild(document.createElement("p"));
+  text.style.margin = "0 0 8px";
+  text.textContent = note || `This message has personal data: ${[...new Set(spans.map((s) => s.type))].join(", ")}.`;
+  const actions: [Choice, string][] = [["redact", "Redact and send"], ["send", "Send anyway"], ["cancel", "Cancel"]];
+  layer.dataset.prompt = "open";
+  return new Promise((resolve) => {
+    const done = (choice: Choice) => {
+      root.replaceChildren();
+      layer.dataset.prompt = "closed";
+      resolve(choice);
+    };
+    for (const [choice, label] of actions.filter(([c]) => !note || c !== "redact")) {
+      const button = panel.appendChild(document.createElement("button"));
+      button.dataset.action = choice;
+      button.textContent = label;
+      button.style.cssText = "margin-right:6px;padding:4px 10px;font:inherit;cursor:pointer;";
+      button.addEventListener("click", () => done(choice));
+    }
+    panel.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") done("cancel");
+    });
+    root.replaceChildren(panel);
+    panel.querySelector("button")?.focus();
+  });
+}
+
+// Window capture phase, so the guard runs before the site's own Enter and click handlers.
+addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+  const composer = composerOf(event.target);
+  if (!composer) return;
+  guard(event, composer, () => composer.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, bubbles: true, cancelable: true })));
+}, true);
+addEventListener("click", (event) => {
+  const button = event.target instanceof Element ? event.target.closest<HTMLElement>(SEND) : null;
+  // The composer typed in last: `current` is set only after the detect wait, so a fast click would slip past.
+  const composer = pending?.isConnected ? pending : current?.composer;
+  if (!button || !composer?.isConnected) return;
+  // The site can re-render its send button after a redaction.
+  guard(event, composer, () => (button.isConnected ? button : document.querySelector<HTMLElement>(SEND))?.click());
+}, true);
