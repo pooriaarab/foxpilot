@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isSearchField, parseValue, searchQuery, SpanWriter } from "../src/agent/fieldtext";
+import { isSearchField, parseValue, searchQuery, SpanWriter } from "@foxpilot/agent/fieldtext";
 
 describe("searchQuery", () => {
   it("keeps a plain query and drops search verbs and the final period", () => {

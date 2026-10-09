@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { normalise, relativeDate, resolveDate } from "@foxpilot/core/text/dates";
-import { qualifiers } from "../src/agent/pick";
+import { qualifiers } from "@foxpilot/agent/pick";
 
 // Friday, September 25, 2026 (local time, as the extension sees it).
 const TODAY = new Date(2026, 8, 25);

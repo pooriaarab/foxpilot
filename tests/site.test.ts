@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { choose, nearlyNames, type Part } from "../src/agent/controller";
-import { searchQuery } from "../src/agent/search";
+import { choose, nearlyNames, type Part } from "@foxpilot/agent/controller";
+import { searchQuery } from "@foxpilot/agent/search";
 import { onSite, siteIn, withoutSite } from "@foxpilot/core/page/site";
 import type { HistoryEntry, Page } from "@foxpilot/core/page/types";
 

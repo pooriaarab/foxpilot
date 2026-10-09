@@ -2,9 +2,9 @@ MIT License
 
 Copyright (c) 2026 Shreyas Karnik
 
-Portions (src/agent/controller.ts, agent.ts, browser.ts, dates.ts,
-snapshot.js) are adapted from gliner2-ultrafast
-(https://github.com/sahibzada-allahyar/gliner2-ultrafast), itself derived
+Portions (packages/agent/src/controller.ts, agent.ts;
+packages/core/src/page/browser.ts, snapshot.js; text/dates.ts) are adapted
+from gliner2-ultrafast (https://github.com/sahibzada-allahyar/gliner2-ultrafast), itself derived
 from Browser Use's jev-ultrafast, used under the MIT License; its copyright
 notice is reproduced below.
 

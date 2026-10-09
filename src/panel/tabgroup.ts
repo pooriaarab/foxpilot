@@ -5,7 +5,7 @@
 // Compat source: MDN browser-compat-data (webextensions/api/tabGroups.json,
 // tabs.json): tabs.group/ungroup and Tab.groupId since Firefox 138;
 // tabGroups.get/update, TAB_GROUP_ID_NONE and Color since Firefox 139.
-import type { AgentView } from "../agent/agent";
+import type { AgentView } from "@foxpilot/agent/agent";
 
 type Color = `${chrome.tabGroups.Color}`;
 
