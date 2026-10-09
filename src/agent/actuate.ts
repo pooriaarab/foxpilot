@@ -150,7 +150,7 @@ export function fillField(node: number, text: string): string | null {
   const parent = (e: Element) => e.parentElement || (e.parentNode as ShadowRoot | null)?.host || null;
   const within = (e: Element, box: Element) => { for (let n: Element | null = e; n; n = parent(n)) if (n === box) return true; return false; };
   const editable = (e: Element | null | undefined): e is HTMLElement =>
-    e instanceof HTMLTextAreaElement || (e instanceof HTMLInputElement && /^(text|search|email|url|tel|number|password|)$/.test(e.type)) ||
+    e instanceof HTMLTextAreaElement || (e instanceof HTMLInputElement && /^(text|search|email|url|tel|number|password|date|)$/.test(e.type)) ||
     (e instanceof HTMLElement && !(e instanceof HTMLInputElement) && e.isContentEditable);
   // Type where focus is, as CDP Input.insertText did: clicking a field often
   // moves focus to a new input (an overlay or combobox). Use that input only

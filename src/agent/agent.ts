@@ -9,8 +9,9 @@ import { MASK, policy, type Policy } from "./policy";
 import { Refused, type FieldContext, type FieldWriter } from "./fieldtext";
 import { searchQuery } from "./search";
 import { stripQualifiers } from "./pick";
+import { working } from "./patience";
 import type { Action, HistoryEntry, Page } from "./types";
-import { verify, type Verdict } from "./verify";
+import { corrections, verify, type Refill, type Verdict } from "./verify";
 
 export const MAX_STEPS = 60;
 /** Consecutive decisions that reach no execution before the run is called stuck. */
@@ -55,6 +56,9 @@ export type AgentView = {
 };
 
 export type SpansFound = Map<string, string>;
+
+/** Does the page now show everything the ask asks to report? Called after each action; null when it cannot tell. */
+export type Finished = (steps: number) => Promise<boolean | null>;
 
 /** The most recent field a value was typed into. */
 function lastFill(history: HistoryEntry[]) {
@@ -101,6 +105,15 @@ function sent(entry: Step): boolean {
   return Boolean(entry.submit) || (entry.kind === "click" && sends({ kind: "click", label: entry.action } as Action));
 }
 
+/** The decision to type a corrected value into a field. */
+function refilling(refill: Refill): Decision {
+  return {
+    choice: refill.action.id, operation: "TYPE_TEXT", target: refill.action.label, requirement: refill.requirement,
+    covered: [], commits: false, date: null, confidence: 1, probabilities: { [refill.action.id]: 1 }, rawAnswers: {},
+    latencyMs: 0, usage: { requirements: 0, labels: 0 },
+  };
+}
+
 export class Agent {
   private memory: Memory = new Map();
   private refused = new Set<string>();
@@ -110,6 +123,10 @@ export class Agent {
   private page!: Page;
   private timing: Timing | null = null;
   private stopRequested = false;
+  /** Fields the page's error text asked to correct, typed before anything else. */
+  private refills: Refill[] = [];
+  /** The page text when a form was last sent, until a field is typed again. */
+  private sentText: string | null = null;
   view: AgentView;
 
   private constructor(
@@ -122,6 +139,7 @@ export class Agent {
     private readonly surfaces: SpansFound,
     private readonly rules: Policy,
     private readonly calls: ModelCall[] | null,
+    private readonly finished?: Finished,
   ) {
     this.view = { status: "ready", goal, parts, history: [], decision: null, textCalls: [], refusals: [], elapsedMs: 0, modelMs: 0 };
   }
@@ -131,6 +149,7 @@ export class Agent {
     model: Scorer, browser: TabBrowser, goal: string,
     makeWriter: (parts: Part[], found: SpansFound, model: Scorer) => FieldWriter, onUpdate: (view: AgentView) => void,
     calls: ModelCall[] | null = null,
+    finished?: Finished,
   ): Promise<Agent> {
     const task = goal.trim();
     if (!task) throw new Error("Type a goal first");
@@ -149,7 +168,7 @@ export class Agent {
     const parts = await requirements(values.length ? task : stripQualifiers(task) || task, recording);
     // A dictated value is typed as written, not as GLiNER2 cased its span.
     for (const value of values) found.set(value.value.toLowerCase(), value.value);
-    const agent = new Agent(model, browser, task, parts, makeWriter(parts, found, model), onUpdate, found, policy(task), calls);
+    const agent = new Agent(model, browser, task, parts, makeWriter(parts, found, model), onUpdate, found, policy(task), calls, finished);
     // A page that just loaded may not have drawn its controls yet (a site
     // opened for the goal); give it up to 3 s before judging it.
     agent.page = await browser.observe();
@@ -239,7 +258,10 @@ export class Agent {
     };
     const started = performance.now();
     const mark = this.calls?.length ?? 0;
-    const decision = await choose(counted, this.page, this.view.history, this.memory, this.refused, this.parts, this.served, this.view.goal, this.rules);
+    const refill = this.refills.find((r) => this.page.actions.some((a) => a.id === r.action.id && a.node === r.action.node));
+    if (!refill) this.refills = [];
+    const decision = refill ? refilling(refill)
+      : await choose(counted, this.page, this.view.history, this.memory, this.refused, this.parts, this.served, this.view.goal, this.rules);
     const decide = Math.round(performance.now() - started);
     // Training data: tie each call this decision made to what it chose.
     if (this.calls) {
@@ -294,9 +316,11 @@ export class Agent {
         textFields: new Set(page.actions.filter((a) => a.kind === "fill").map((a) => a.node)).size,
       };
       const started = performance.now();
+      const refill = this.refills.find((r) => r.action.id === action.id);
+      this.refills = this.refills.filter((r) => r !== refill);
       try {
         // A password field takes the password the ask dictates; no writer sees it.
-        text = action.secret ? this.rules.password : normalise(await this.writer.write(context), decision.date);
+        text = refill ? refill.text : action.secret ? this.rules.password : normalise(await this.writer.write(context), decision.date);
         if (text == null) throw new Refused("The goal dictates no password");
         // The password goes into a password field only, never into one the page shows.
         if (!action.secret && this.rules.password && text.includes(this.rules.password)) {
@@ -352,6 +376,9 @@ export class Agent {
     this.emit();
     const observing = performance.now();
     this.page = await this.browser.observe();
+    // A new document is read again once it is quiet: a page that draws its
+    // form from a request (each step of a wizard) has no controls at first.
+    if ((this.page.marker as unknown[])?.[0] !== (page.marker as unknown[])?.[0]) this.page = await this.browser.observe(true);
     // What the committed field shows once the suggestion is taken; verify()
     // trusts this node even if the page renames it later.
     if (entry.committed_node != null) {
@@ -368,6 +395,24 @@ export class Agent {
     }
     entry.pageChanged = this.page.fingerprint !== page.fingerprint;
     entry.elapsedMs = this.elapsed();
+    // After a send, error text next to a field can ask for another value
+    // ("Use your work address …"): that field is typed again, then sent again.
+    if (sent(entry)) this.sentText = page.text;
+    else if (entry.kind === "fill") this.sentText = null;
+    if (this.sentText != null) {
+      this.refills = corrections(this.sentText, this.page, history);
+      if (this.refills.length) this.sentText = null;
+    }
+    // Zipline addition: the run is done once the page shows what the ask asks
+    // to report, in text this run made appear (a quote, a review step's code).
+    // While it can tell, values on the page do not end the run: a sent form
+    // that shows them can still be refused or have a next step. A page still
+    // at work ("4s of about 10s") has not shown its result yet.
+    const reported = this.refills.length || working(this.page.text) ? false : ((await this.finished?.(history.length)) ?? null);
+    if (reported) {
+      this.view.status = "done";
+      return;
+    }
     const repeated = history.slice(-3);
     this.view.status =
       repeated.length === 3 && repeated.every((h) => h.pageChanged === false && h.kind !== "wait") ? "blocked" : "ready";
@@ -375,7 +420,7 @@ export class Agent {
     // Parts without a value ("Book me a flight") are left to the page check, and
     // so is a value typed then sent with Enter (Google Maps' destination is never
     // "served": no suggestion was taken).
-    else if (sent(entry) && this.parts.every((p) => this.served.has(p.text) || (!p.values.length && !p.date) ||
+    else if (reported === null && sent(entry) && this.parts.every((p) => this.served.has(p.text) || (!p.values.length && !p.date) ||
       history.some((h) => h.kind === "fill" && h.requirement === p.text))) {
       await this.finishIfVerified(navigations);
     }
