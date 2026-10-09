@@ -1,37 +1,34 @@
-// Drives foxpilot in a real Firefox. One session is one Firefox with the
-// built extension (dist/) in a fresh profile, one task tab, and the panel in
+// Drives an app in a real Firefox. One session is one Firefox with the built
+// app (dist/<app>/) in a fresh profile, one task tab, and the app's panel in
 // its own window. One session runs many goals, so GLiNER2 loads once.
 //
-//   const session = await launch({ headless });  // Firefox, extension, panel window
+//   const session = await launch({ app: "foxpilot", headless }); // Firefox, app, panel window
 //   const tabId = await session.openTask(url);    // loads url in the task tab
 //   const { modelLoadMs } = await session.ready(); // waits for GLiNER2
-//   const result = await session.run(goal, { tabId, llm, record }); // RunResult, src/panel/sidepanel.ts
+//   const result = await session.run(goal, { tabId, llm, record }); // RunResult, apps/foxpilot/src/panel/sidepanel.ts
 //   const page = await session.snapshot(tabId);   // {url, title, controls}: what the agent sees
 //   await session.screenshot(path);                // the task tab
 //   await session.states();                        // its tabs, radios and toggles: [label, checked, selected, pressed]
 //   await session.close();
 //
-// format(result) gives the human-readable lines. preflight() names a missing
-// Firefox or build. Env: FIREFOX (binary path).
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+// format(result) gives the human-readable lines. preflight({ app }) names a
+// missing Firefox or build. Env: FIREFOX (binary path).
+import { createHash } from "node:crypto";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import puppeteer from "puppeteer";
 
 export const root = join(dirname(fileURLToPath(import.meta.url)), "../..");
-export const dist = join(root, "dist");
+export const distOf = (app) => join(root, "dist", app);
 export const FIREFOX = process.env.FIREFOX ?? "/Applications/Firefox.app/Contents/MacOS/firefox";
-// Fixed, so the panel URL is known before the extension loads.
-const UUID = "5f3c9a7e-2b1d-4e6a-9c80-1d2e3f4a5b6c";
-const GECKO_ID = "foxpilot@pooriaarab.github.io";
-const PANEL = `moz-extension://${UUID}/sidepanel.html`;
 // A first model download, or a run with the LLM, can take minutes.
 const LONG_MS = 600_000;
 
-/** Why a session cannot start (no Firefox, no build), or null. */
-export function preflight() {
-  for (const [what, path] of [["Firefox", FIREFOX], ["the built extension (run pnpm build)", join(dist, "manifest.json")]]) {
+/** Why a session cannot start (no Firefox, no build of the app), or null. */
+export function preflight({ app }) {
+  for (const [what, path] of [["Firefox", FIREFOX], [`the built app (run pnpm build ${app})`, join(distOf(app), "manifest.json")]]) {
     if (!existsSync(path)) return `Cannot find ${what} at ${path}.`;
   }
   return null;
@@ -55,7 +52,18 @@ async function openExtensionPage(page, target) {
   await poll(page, (u) => location.href === u && document.readyState === "complete", target, 30_000);
 }
 
-export async function launch({ headless = false } = {}) {
+// The gecko id and the panel page come from the app's manifest. The UUID is
+// fixed per gecko id, so the panel URL is known before the extension loads.
+function extension(app) {
+  const manifest = JSON.parse(readFileSync(join(distOf(app), "manifest.json"), "utf8"));
+  const id = manifest.browser_specific_settings.gecko.id;
+  const hex = createHash("sha256").update(id).digest("hex");
+  const uuid = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+  return { id, uuid, panel: `moz-extension://${uuid}/${manifest.sidebar_action.default_panel}` };
+}
+
+export async function launch({ app, headless = false }) {
+  const { id, uuid, panel: panelUrl } = extension(app);
   const profile = mkdtempSync(join(tmpdir(), "foxpilot-"));
   const browser = await puppeteer.launch({
     browser: "firefox",
@@ -66,27 +74,27 @@ export async function launch({ headless = false } = {}) {
     args: ["-remote-allow-system-access"],
     defaultViewport: null,
     protocolTimeout: LONG_MS,
-    extraPrefsFirefox: { "extensions.webextensions.uuids": JSON.stringify({ [GECKO_ID]: UUID }) },
+    extraPrefsFirefox: { "extensions.webextensions.uuids": JSON.stringify({ [id]: uuid }) },
   });
   const close = async () => {
     await browser.close().catch(() => {});
     rmSync(profile, { recursive: true, force: true });
   };
   try {
-    await browser.installExtension(dist);
+    await browser.installExtension(distOf(app));
     const task = await browser.newPage();
     // The real sidebar cannot be opened over BiDi (it needs a user gesture). A popup
     // window is the closest match: the panel is visible, so its timers run at full
     // speed, and focus sits outside the task page, as it does in the sidebar.
     const opener = await browser.newPage();
-    await openExtensionPage(opener, PANEL);
+    await openExtensionPage(opener, panelUrl);
     await opener.evaluate(async (u) => {
       await chrome.windows.create({ url: u, type: "popup", left: 1284, top: 0, width: 440, height: 1080, focused: true });
-    }, PANEL);
+    }, panelUrl);
     let panel = null;
     for (const deadline = Date.now() + 30_000; !panel && Date.now() < deadline; await sleep(250)) {
       for (const p of await browser.pages()) {
-        if (p !== opener && (await p.evaluate(() => location.href).catch(() => null)) === PANEL) panel = p;
+        if (p !== opener && (await p.evaluate(() => location.href).catch(() => null)) === panelUrl) panel = p;
       }
     }
     if (!panel) throw new Error("The panel window did not open.");

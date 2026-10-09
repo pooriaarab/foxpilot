@@ -58,7 +58,7 @@ if (args.includes("--dry-run")) {
 }
 
 const { launch } = await import("../lib/firefox.mjs");
-const session = await launch();
+const session = await launch({ app: "foxpilot" });
 const rows = entries.filter((e) => e.skipped).map((e) => ({ id: e.id, family: e.family, status: "skipped", reason: e.skipped }));
 try {
   for (const entry of attemptable) {

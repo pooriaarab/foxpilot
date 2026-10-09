@@ -8,8 +8,9 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { dist, FIREFOX, format, launch, preflight, root } from "./lib/firefox.mjs";
+import { distOf, FIREFOX, format, launch, preflight, root } from "./lib/firefox.mjs";
 
+const app = "foxpilot";
 const TASKS = {
   flights: ["https://www.google.com/travel/flights?hl=en", "Find a one-way ticket from New York to San Francisco on October 9, 2026."],
   maps: ["https://www.google.com/maps?hl=en", "Get directions from Berlin Hauptbahnhof to Brandenburg Gate."],
@@ -26,10 +27,11 @@ if (!goal) {
   process.exit(2);
 }
 if (args.includes("--dry-run")) {
+  const dist = distOf(app);
   console.log(JSON.stringify({ firefox: FIREFOX, firefoxFound: existsSync(FIREFOX), dist, distBuilt: existsSync(join(dist, "manifest.json")), task, url, goal, useLlm, headless }, null, 1));
   process.exit(0);
 }
-const missing = preflight();
+const missing = preflight({ app });
 if (missing) {
   console.error(missing);
   process.exit(2);
@@ -46,7 +48,7 @@ const record = { task, goal, url, llm: useLlm, gitSha: git("rev-parse", "HEAD"),
 let failure = null;
 let session = null;
 try {
-  session = await launch({ headless });
+  session = await launch({ app, headless });
   record.firefox = await session.version();
   const tabId = await session.openTask(url);
   ({ modelLoadMs: record.modelLoadMs } = await session.ready());
