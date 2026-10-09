@@ -6,6 +6,7 @@
 // window.__glinerFast is shared with them.
 import { snapshot } from "./snapshot.js";
 import { settle } from "./settle";
+import { ready } from "./ready";
 import { fillField, pressKey, scrollAt, strike } from "./actuate";
 import { KIT_PORT } from "./types";
 
@@ -20,7 +21,7 @@ function nodeGuard(node: number) {
   return c ? [c.pageKey(), c.guard(c.nodes.get(node))] : null;
 }
 
-const kit = { snapshot, settle, nodeGuard, strike, fillField, pressKey, scrollAt };
+const kit = { snapshot, settle, ready, nodeGuard, strike, fillField, pressKey, scrollAt };
 
 export type Kit = typeof kit;
 export type KitCall = { id: number; name: keyof Kit; args: unknown[] };
