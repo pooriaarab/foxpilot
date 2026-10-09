@@ -1,12 +1,15 @@
 // A goal that names a site ("… on amazon.com") starts there. Only explicit
-// domains count: "on amazon" is not guessed into a URL.
+// domains count: "on amazon" is not guessed into a URL. The domain of an email
+// address ("sam@example.com") is not a site, and neither is a name reserved for
+// examples (RFC 2606: example.com, example.net, example.org).
 
-const DOMAIN = /\b(?:https?:\/\/)?((?:[a-z0-9-]+\.)+(?:com|org|net|io|co|ai|dev|app|edu|gov|uk|de|fr|in|ca|au|jp)(?:\.[a-z]{2})?)\b(?:\/\S*)?/i;
+const DOMAIN = /(?<![@\w.-])(?:https?:\/\/)?((?:[a-z0-9-]+\.)+(?:com|org|net|io|co|ai|dev|app|edu|gov|uk|de|fr|in|ca|au|jp)(?:\.[a-z]{2})?)\b(?![@.-]\w)(?:\/\S*)?/gi;
+const RESERVED = /(?:^|\.)example\.(?:com|net|org)$/i;
 
 export type Site = { host: string; url: string; phrase: string };
 
 export function siteIn(goal: string): Site | null {
-  const found = DOMAIN.exec(goal);
+  const found = [...goal.matchAll(DOMAIN)].find((m) => !RESERVED.test(m[1]!));
   if (!found) return null;
   const host = found[1]!.toLowerCase().replace(/^www\./, "");
   // Include the word that attaches it to the goal ("on", "at", "from", "in").
