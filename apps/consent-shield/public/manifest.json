@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Consent Shield",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Refuses optional cookies and declines nag dialogs. A model on your device reads the button labels. Nothing leaves your device.",
   "browser_specific_settings": {
     "gecko": {
