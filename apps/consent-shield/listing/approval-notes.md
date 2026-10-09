@@ -4,13 +4,14 @@
 
 A consent dialog can appear on any site. The user does not choose the sites in advance, so no fixed host list can work.
 
-The content script runs on every page at `document_idle`. It does three things:
+The content script runs on every page at `document_idle`. It does four things:
 
 1. It finds a cookie or newsletter dialog in the page.
 2. It reads only the button and toggle labels in that dialog.
-3. It presses "Reject all", or switches off optional toggles. It never presses "Accept all".
+3. It switches off the optional toggles, opens the next layer, and presses "Reject all", "Save" or "No thanks". It never presses "Accept all", and it never switches off a toggle for necessary cookies.
+4. It clicks only controls inside the dialog. It takes one step at a time, at most 60 steps on a page and for at most 60 seconds on a dialog. When a step fails, it stops and leaves the page as it is.
 
-The add-on keeps a local log in `storage.local`. It sends nothing off the device.
+The user can switch the add-on off for each site in the popup. That list is in `storage.local`. The log of steps for each tab is in `storage.session`, and the popup shows it. The add-on sends nothing off the device.
 
 ## No network
 

@@ -1,4 +1,5 @@
-// Popup script. It shows the dry-run log of the active tab and the per-site off switch.
+// Popup script. It shows the steps taken on the active tab and the per-site off switch.
+import { says } from "./plan";
 import type { TabLog } from "./store";
 import { tabKey } from "./store";
 
@@ -19,9 +20,9 @@ box.addEventListener("change", async () => {
 
 const key = tab?.id == null ? "" : tabKey(tab.id);
 const log = key ? ((await chrome.storage.session.get(key))[key] as TabLog | undefined)?.log ?? [] : [];
-for (const plan of log) {
+for (const entry of log) {
   const item = document.createElement("li");
-  item.textContent = `${plan.title || "Dialog"}: ${plan.summary}`;
+  item.textContent = `${entry.title || "Dialog"}: ${entry.failed ? `stopped, ${entry.failed}` : says(entry)}`;
   list.append(item);
 }
 if (!log.length) list.replaceWith(Object.assign(document.createElement("p"), { textContent: "No consent or nag dialog on this page yet." }));
