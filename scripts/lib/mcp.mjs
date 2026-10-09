@@ -10,9 +10,9 @@ export async function serve({ headless = false } = {}) {
   let starting = null;
   let tabId = null;
   const warm = () => (starting ??= (async () => {
-    const missing = preflight();
+    const missing = preflight({ app: "foxpilot" });
     if (missing) throw new Error(missing);
-    const session = await launch({ headless });
+    const session = await launch({ app: "foxpilot", headless });
     const { modelLoadMs } = await session.ready();
     console.error(`model loaded in ${(modelLoadMs / 1000).toFixed(1)} s`);
     return session;

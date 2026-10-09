@@ -13,7 +13,7 @@
     "test": "vitest run",
     "build": "node scripts/build.mjs",
     "watch": "node scripts/build.mjs --watch",
-    "lint:ext": "web-ext lint -s dist",
+    "lint:ext": "web-ext lint -s dist/foxpilot",
     "ci:local": "pnpm typecheck && pnpm test && pnpm build && pnpm lint:ext",
     "e2e": "pnpm build && node scripts/e2e.mjs",
     "bench:firefox": "node bench/run.mjs",

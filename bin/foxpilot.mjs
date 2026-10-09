@@ -50,13 +50,13 @@ if (command === "mcp") {
     console.error(USAGE);
     process.exit(2);
   }
-  const missing = preflight();
+  const missing = preflight({ app: "foxpilot" });
   if (missing) {
     console.error(missing);
     process.exit(2);
   }
 
-  const session = await launch({ headless: options.headless });
+  const session = await launch({ app: "foxpilot", headless: options.headless });
   let passed = true;
   try {
     // Progress goes to stderr, so --json output stays clean.

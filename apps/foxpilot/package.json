@@ -1,0 +1,12 @@
+{
+  "name": "@foxpilot/app-foxpilot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "foxpilot, the browser agent add-on: the sidebar panel and the background page. The version that ships lives in public/manifest.json.",
+  "dependencies": {
+    "@foxpilot/agent": "workspace:*",
+    "@foxpilot/core": "workspace:*",
+    "@huggingface/transformers": "^4.3.0"
+  }
+}
