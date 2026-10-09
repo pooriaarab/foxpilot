@@ -128,9 +128,14 @@ export function snapshot() {
   // Inside a scope, offer the scope's own controls and the popups its fields open.
   const inScope = controls(root, selector);
   if (root!==document) for (const {popup} of popups) inScope.push(...deep(popup, selector));
+  // A custom switch hides its checkbox (0x0, opacity 0) and draws a <label for>. The label
+  // stands in for it: its box is where a click lands, and the click toggles the checkbox.
+  const standIn = e => e.tagName==='INPUT' && (e.type==='checkbox' || e.type==='radio') && !visible(e) ?
+    [...(e.labels||[])].find(l => visible(l) && l.getBoundingClientRect().width>0) : null;
   for (const e of new Set(inScope)) {
-    if (!safe(e) || !visible(e) || e.matches(':disabled') || e.closest('[aria-disabled="true"]')) continue;
-    const r=e.getBoundingClientRect(), x=r.x+r.width/2, y=r.y+r.height/2, rname=role(e);
+    const stand=standIn(e);
+    if (!safe(e) || !(stand || visible(e)) || e.matches(':disabled') || e.closest('[aria-disabled="true"]')) continue;
+    const r=(stand||e).getBoundingClientRect(), x=r.x+r.width/2, y=r.y+r.height/2, rname=role(e);
     if (!rname || r.width<=0 || r.height<=0) continue;
     // Controls the page has rendered but scrolled past are kept, not dropped: a
     // search field below the fold is the whole task on plenty of sites. They are
