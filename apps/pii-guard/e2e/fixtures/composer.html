@@ -1,7 +1,10 @@
 <!doctype html>
 <!-- A chat composer for the PII Guard E2E. ?kind=textarea|contenteditable|prosemirror.
      "prosemirror" re-renders its paragraphs on each input, as ProseMirror does.
-     #reset replaces the composer element, as a chat site does on "New chat". -->
+     #reset replaces the composer element, as a chat site does on "New chat".
+     Enter (not Shift+Enter) and the send button send the site's own copy of the
+     text, kept from input events, into window.sent. window.prompts counts PII
+     Guard prompts. window.locked makes the composer undo every edit. -->
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -9,11 +12,14 @@
     <style>
       body { font: 16px/1.5 system-ui, sans-serif; margin: 40px; }
       #composer { width: 640px; min-height: 96px; padding: 12px; border: 1px solid #888; border-radius: 12px; font: inherit; }
+      #slot { margin-top: 160px; }
     </style>
   </head>
   <body>
     <button id="reset">New chat</button>
     <div id="slot"></div>
+    <button id="send" aria-label="Send message">Send</button>
+    <ol id="sent"></ol>
     <script>
       const kind = new URLSearchParams(location.search).get("kind") ?? "textarea";
       function render(el, text) {
@@ -24,18 +30,43 @@
         getSelection().removeAllRanges();
         getSelection().addRange(range);
       }
+      Object.assign(window, { sent: [], prompts: 0, locked: false });
+      let el;
+      let model = "";
+      const read = () => (kind === "textarea" ? el.value : kind === "prosemirror" ? [...el.children].map((p) => p.textContent).join("\n") : el.innerText)
+        .replace(/\u00a0/g, " ").replace(/\n+$/, "");
+      window.composerText = read;
+      const write = (text) => (kind === "textarea" ? (el.value = text) : render(el, text));
+      function send() {
+        window.sent.push(model);
+        document.getElementById("sent").append(Object.assign(document.createElement("li"), { textContent: model }));
+        model = "";
+        write("");
+      }
       function reset() {
-        const el = document.createElement(kind === "textarea" ? "textarea" : "div");
+        el = document.createElement(kind === "textarea" ? "textarea" : "div");
         el.id = "composer";
+        model = "";
         if (kind !== "textarea") el.contentEditable = "true";
-        if (kind === "prosemirror") {
-          el.className = "ProseMirror";
-          el.addEventListener("input", () => render(el, el.innerText.replace(/\n$/, "")));
-        }
+        if (kind === "prosemirror") el.className = "ProseMirror";
+        el.addEventListener("input", () => {
+          if (window.locked) return write(model);
+          if (kind === "prosemirror") render(el, el.innerText.replace(/\n$/, ""));
+          model = read();
+        });
+        el.addEventListener("keydown", (event) => {
+          if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+          event.preventDefault();
+          send();
+        });
         document.getElementById("slot").replaceChildren(el);
         el.focus();
       }
       document.getElementById("reset").addEventListener("click", reset);
+      document.getElementById("send").addEventListener("click", send);
+      // A record whose old value is not "open" is a prompt that opens.
+      new MutationObserver((records) => { window.prompts += records.filter((r) => r.target.id === "pii-guard-layer" && r.oldValue !== "open").length; })
+        .observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ["data-prompt"], attributeOldValue: true });
       reset();
     </script>
   </body>
