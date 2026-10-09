@@ -5,21 +5,12 @@
 // by side; tests/controller.test.ts checks the decisions match it.
 import { firstDate, resolveDate, sameDate, type IsoDate } from "@foxpilot/core/text/dates";
 import type { Action, HistoryEntry, Page } from "@foxpilot/core/page/types";
+import type { Labels, Scorer } from "@foxpilot/core/model/scorer";
 import { destinationAsk, isSearchField, searchAsk } from "./search";
 import { parseAsk, properName, ruledOut } from "@foxpilot/core/text/ask";
 import { patience } from "./patience";
-import { acceptsAll, declining, refusing, stanceOf, type Control } from "./dialogs";
+import { acceptsAll, declining, refusing, stanceOf, type Control } from "@foxpilot/core/dialogs";
 import { blocks, CLOSED, type Policy } from "@foxpilot/core/text/policy";
-
-export type Labels = Record<string, string | undefined>;
-
-/** What the controller needs from GLiNER2. */
-export interface Scorer {
-  extractEntities(text: string, types: Labels, threshold?: number): Promise<Record<string, { text: string; start?: number }[]>>;
-  classify(text: string, name: string, labels: Labels): Promise<Record<string, number>>;
-  /** classify() for each text against the same prompt and labels, in one model call. */
-  classifyMany(texts: string[], name: string, labels: Labels): Promise<Record<string, number>[]>;
-}
 
 export const FLOOR = 0.5;
 export const VALUE_FLOOR = 0.02;

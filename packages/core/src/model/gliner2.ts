@@ -4,8 +4,8 @@
 // token ids and results match it (tests/parity.test.ts).
 import { AutoModel, AutoTokenizer, Tensor, env } from "@huggingface/transformers";
 import type { PreTrainedModel, PreTrainedTokenizer } from "@huggingface/transformers";
+import type { Labels } from "./scorer";
 
-export type Labels = Record<string, string | undefined>;
 export type Entity = { text: string; confidence: number; start: number; end: number };
 export type Device = "webgpu" | "wasm" | "cpu";
 export type Dtype = "fp32" | "fp16";

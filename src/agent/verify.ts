@@ -7,7 +7,8 @@
 // matching is literal, like the controller's, except on a field the page
 // renamed after the agent committed it.
 import { parseAsk } from "@foxpilot/core/text/ask";
-import { nearlyNames, namesValue, unsentForms, type Part, type Scorer } from "./controller";
+import { nearlyNames, namesValue, unsentForms, type Part } from "./controller";
+import type { Scorer } from "@foxpilot/core/model/scorer";
 import { firstDate } from "@foxpilot/core/text/dates";
 import type { Action, HistoryEntry, Page } from "@foxpilot/core/page/types";
 

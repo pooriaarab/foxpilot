@@ -3,7 +3,8 @@
 import { parseAsk } from "@foxpilot/core/text/ask";
 import type { ModelCall } from "@foxpilot/core/model/gliner2";
 import { TabBrowser, StalePage } from "@foxpilot/core/page/browser";
-import { choose, requirements, sends, type Decision, type Memory, type Part, type Scorer } from "./controller";
+import { choose, requirements, sends, type Decision, type Memory, type Part } from "./controller";
+import type { Scorer } from "@foxpilot/core/model/scorer";
 import { firstDate, normalise } from "@foxpilot/core/text/dates";
 import { MASK, policy, type Policy } from "@foxpilot/core/text/policy";
 import { Refused, type FieldContext, type FieldWriter } from "./fieldtext";

@@ -6,7 +6,8 @@
 // Either may refuse; the agent then stops offering that field.
 import { pipeline, type TextGenerationPipeline } from "@huggingface/transformers";
 import { reshape } from "@foxpilot/core/text/ask";
-import type { Labels, Part, Scorer } from "./controller";
+import type { Part } from "./controller";
+import type { Labels, Scorer } from "@foxpilot/core/model/scorer";
 import { isSearchField, searchAsk, searchQuery } from "./search";
 
 export { isSearchField, searchQuery };
