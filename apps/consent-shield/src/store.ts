@@ -1,11 +1,14 @@
-// The per-tab store. The content script reports; the background keeps the
-// latest plans and a log in storage.session; the popup and the E2E runner read it.
-import type { Plan } from "./plan";
+// The per-tab store. The content script reports each step it takes; the
+// background keeps the page's log in storage.session; the popup and the E2E runner read it.
+import type { Step } from "./plan";
 
-/** What a content script sends: the plans for the dialogs on screen, or that its site is off. */
-export type Report = { type: "plans"; url: string; plans: Plan[] } | { type: "off"; url: string };
+/** One step the content script took. `failed` says why it did not, and the page was left as it was. */
+export type Entry = Step & { dialog: number; title: string; failed?: string };
 
-/** One tab. `log` keeps every distinct plan of the page, oldest first. */
-export type TabLog = { url: string; off: boolean; plans: Plan[]; log: (Plan & { at: number })[] };
+/** What a content script sends: a new page, that its site is off, or one step. */
+export type Report = { type: "start" | "off"; url: string } | { type: "step"; url: string; entry: Entry };
+
+/** One tab. `log` keeps every step of the page, oldest first. `stopped` is the reason of the failed step. */
+export type TabLog = { url: string; off: boolean; stopped: string | null; log: (Entry & { at: number })[] };
 
 export const tabKey = (tabId: number) => `tab:${tabId}`;

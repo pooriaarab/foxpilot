@@ -1,14 +1,15 @@
 // Finds consent and nag dialogs in the page and plans the clicks that refuse
-// them. Nothing here presses a control: the plan is a dry run. dialogs.ts
-// picks each control; this file only finds the dialog and replays the picks
-// on a copy of its controls, so one plan covers one layer.
+// them. content.ts carries out the plan. dialogs.ts picks each control; this
+// file only finds the dialog and replays the picks on a copy of its controls,
+// so one plan covers one layer.
 import { acceptsAll, declining, refusing, type Control, type Stance } from "@foxpilot/core/dialogs";
 import type { Scorer } from "@foxpilot/core/model/scorer";
 import type { Action, HistoryEntry } from "@foxpilot/core/page/types";
 import { firstDate } from "@foxpilot/core/text/dates";
 
-export type Step = { kind: "toggle" | "expand" | "press" | "scroll"; label: string };
-export type Plan = { dialog: number; stance: Stance; title: string; steps: Step[]; summary: string };
+/** One action. `node` is the snapshot node of the control; a scroll has none. */
+export type Step = { kind: "toggle" | "expand" | "press" | "scroll"; label: string; node?: number };
+export type Plan = { dialog: number; stance: Stance; title: string; steps: Step[] };
 
 // The page's own dialog markup, and the containers CMPs inject at the end of
 // the body: fixed or sticky boxes with buttons. Vendor names are not needed.
@@ -81,7 +82,9 @@ export async function plan(
   const steps: Step[] = [];
   if (stance === "decline") {
     const found = await declining(model, stance, controls);
-    if (found && !acceptsAll(found.label)) steps.push({ kind: "press", label: found.label });
+    // declining() keeps the last control with the best label: stacked prompts put the top one last.
+    const node = [...controls].reverse().find((c) => c.pick && c.label === found?.label)?.action.node;
+    if (found && !acceptsAll(found.label)) steps.push({ kind: "press", label: found.label, node });
   } else {
     const history: HistoryEntry[] = [];
     // Replay refusing() on the copy: a switched toggle reads as off, and the next pick follows.
@@ -91,12 +94,13 @@ export async function plan(
       if (toggle) {
         toggle.action.checked = "false";
         history.push({ kind: "click", action: label });
-        steps.push({ kind: "toggle", label });
+        steps.push({ kind: "toggle", label, node: toggle.action.node });
         continue;
       }
       // Expanding a section or opening a layer shows controls this plan cannot see yet.
-      const expands = controls.some((c) => c.label === label && c.action.expanded === "false");
-      if (!acceptsAll(label)) steps.push({ kind: expands ? "expand" : "press", label });
+      const control = controls.find((c) => c.pick && c.label === label);
+      const expands = control?.action.expanded === "false";
+      if (!acceptsAll(label)) steps.push({ kind: expands ? "expand" : "press", label, node: control?.action.node });
       break;
     }
     // refusing() walks the layers and passes over "Reject all". A one-layer banner offers nothing else,
@@ -105,23 +109,23 @@ export async function plan(
     if ((!last || last.kind === "toggle") && below(element)) steps.push({ kind: "scroll", label: "Scroll down" });
     else if (!last || last.kind === "toggle") {
       const reject = controls.find((c) => c.pick && !TOGGLES.has(c.action.role ?? "") && REJECT.test(c.label) && !acceptsAll(c.label));
-      if (reject) steps.push({ kind: "press", label: reject.label });
+      if (reject) steps.push({ kind: "press", label: reject.label, node: reject.action.node });
     }
   }
   if (!steps.length) return null;
   const title = tidy((element.querySelector("h1,h2,h3,[id*=title i]")?.textContent ?? element.getAttribute("aria-label") ?? "").slice(0, 80));
-  return { dialog: idOf(element), stance, title, steps, summary: describe(steps) };
+  return { dialog: idOf(element), stance, title, steps };
 }
 
-/** One step for people: 'press "Save my choices"'. */
+/** One step taken, for people: 'pressed "Save my choices"'. */
 export function says(step: Step): string {
-  return step.kind === "scroll" ? "scroll down" : `${{ toggle: "turn off", expand: "open", press: "press" }[step.kind]} "${step.label}"`;
+  return step.kind === "scroll" ? "scrolled down" : `${{ toggle: "turned off", expand: "opened", press: "pressed" }[step.kind]} "${step.label}"`;
 }
 
-/** 'Would turn off 9 toggles and press "Save my choices"'. */
+/** 'Turned off 9 toggles, pressed "Save my choices"'. Scrolls are left out. */
 export function describe(steps: Step[]): string {
   const toggles = steps.filter((s) => s.kind === "toggle").length;
-  const end = steps.filter((s) => s.kind !== "toggle").map(says);
-  const parts = [...(toggles ? [`turn off ${toggles} toggle${toggles === 1 ? "" : "s"}`] : []), ...end];
-  return `Would ${parts.join(" and ")}`;
+  const end = steps.filter((s) => s.kind === "expand" || s.kind === "press").map(says);
+  const text = [...(toggles ? [`turned off ${toggles} toggle${toggles === 1 ? "" : "s"}`] : []), ...end].join(", ");
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }

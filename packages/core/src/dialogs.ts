@@ -52,6 +52,11 @@ export function acceptsAll(label: string): boolean {
   return ACCEPT_ALL.test(label);
 }
 
+/** Never switch these off: the site needs them to work. */
+export function required(label: string): boolean {
+  return REQUIRED.test(label);
+}
+
 const seen = new Map<string, [string, number]>();
 
 /** The best class of a button label under one label set. A label keeps its class for the run. */
@@ -97,7 +102,7 @@ export async function refusing(model: Scorer, controls: Control[], history: Hist
   const open = controls.filter((c) => c.pick);
   const toggles = controls.filter((c) => TOGGLES.has(c.action.role ?? ""));
   const switched = history.filter((e) => e.kind === "click" && toggles.some((t) => t.label === e.action)).length;
-  const on = open.find((c) => TOGGLES.has(c.action.role ?? "") && c.action.checked === "true" && !REQUIRED.test(c.label));
+  const on = open.find((c) => TOGGLES.has(c.action.role ?? "") && c.action.checked === "true" && !required(c.label));
   if (on && switched < TOGGLE_CAP) return { label: on.label, score: 1 };
   const collapsed = open.find((c) => c.action.expanded === "false" && c.action.kind === "click");
   if (collapsed) return { label: collapsed.label, score: 1 };
