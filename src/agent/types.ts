@@ -16,6 +16,8 @@ export type Action = {
   form?: number;
   submit?: boolean;
   dialog?: boolean;
+  /** A password field: it takes only a password the ask dictates. */
+  secret?: boolean;
   offscreen?: boolean;
   self_link?: boolean;
   suggestion_for?: number;

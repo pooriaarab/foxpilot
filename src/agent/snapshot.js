@@ -8,7 +8,10 @@ export function snapshot() {
     const id=cache.ids.get(e); cache.nodes.set(id,e); return id;
   };
   for (const [id,e] of cache.nodes) if (!e.isConnected) cache.nodes.delete(id);
-  const safe = e => !['password','file','hidden'].includes(e.type);
+  const safe = e => !['file','hidden'].includes(e.type);
+  // A password field is observed, but its value never leaves the page.
+  const secret = e => e.tagName==='INPUT' && e.type==='password';
+  const shown = e => secret(e) ? (e.value ? '•••' : '') : e.value;
   const visible = e => !e.closest('[aria-hidden="true"],[inert]') &&
     e.checkVisibility({checkOpacity:true,checkVisibilityCSS:true});
   const name = (e,seen=new Set()) => {
@@ -67,7 +70,7 @@ export function snapshot() {
       if (['button','submit','reset','image'].includes(e.type)) return 'button';
       if (e.type==='search') return 'searchbox';
       if (e.type==='number') return 'spinbutton';
-      if (['text','email','url','tel'].includes(e.type)) return 'textbox';
+      if (['text','email','url','tel','password'].includes(e.type)) return 'textbox';
     }
     return null;
   };
@@ -84,11 +87,11 @@ export function snapshot() {
     // inputs as they hydrate, and counting those makes this key change on its
     // own -- which reads as "the page moved under you" and rejects every action.
     [...deep(document,'input,textarea,select')].filter(e=>safe(e)&&visible(e))
-      .map(e=>[identity(e),e.value,e.checked,e.selectedIndex,e.disabled,e.readOnly])];
+      .map(e=>[identity(e),shown(e),e.checked,e.selectedIndex,e.disabled,e.readOnly])];
   cache.guard=e=>{
     if (!e?.isConnected || !visible(e)) return null;
     const scope=e.closest('form,dialog,[role="dialog"],article,li,tr,[role="row"]') || e.parentElement;
-    return [identity(e),role(e),name(e),e.value??null,e.checked??null,e.selectedIndex??null,
+    return [identity(e),role(e),name(e),shown(e)??null,e.checked??null,e.selectedIndex??null,
       e.readOnly??null,e.matches(':disabled'),e.getAttribute('aria-disabled'),
       e.getAttribute('aria-expanded'),e.getAttribute('aria-checked'),e.getAttribute('aria-selected'),
       e.getAttribute('href'),scope?.innerText?.slice(0,6000)||''];
@@ -136,6 +139,7 @@ export function snapshot() {
     if (form) base.form=identity(form);
     if (off) base.offscreen=true;
     if (inDialog(e)) base.dialog=true;
+    if (secret(e)) base.secret=true;
     // A link back to the page you are already on advances nothing. Site headers
     // are full of them, and they read exactly like the task that brought you here.
     const here=location.href.replace(/#.*$/,'');
@@ -161,7 +165,7 @@ export function snapshot() {
       const editable=!e.readOnly && e.getAttribute('aria-readonly')!=='true' &&
         (['textbox','searchbox','spinbutton'].includes(rname) ||
           (rname==='combobox' && ['INPUT','TEXTAREA'].includes(e.tagName)));
-      const value='value' in e ? String(e.value) :
+      const value='value' in e ? String(shown(e)) :
         e.isContentEditable || rname==='combobox' ? e.innerText.trim() : '';
       actions.push({...base,kind:editable?'fill':'click',value});
       if (editable) actions.push({...base,kind:'click',value,label:'Open '+base.label});

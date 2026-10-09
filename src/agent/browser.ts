@@ -9,6 +9,7 @@
 // window.__glinerFast cache stays between calls. The page kit (kit.ts) is
 // injected once per document and answers calls over a runtime.Port.
 import { KIT_PORT, type Action, type Page } from "./types";
+import { MASK } from "./policy";
 import type { Kit, KitCall, KitReply } from "./kit";
 
 export class StalePage extends Error {}
@@ -16,7 +17,7 @@ export class StalePage extends Error {}
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function actionLabel(action: Action, text?: string | null): string {
-  if (action.kind === "fill") return `type "${(text ?? "").slice(0, 40)}"`;
+  if (action.kind === "fill") return `type "${action.secret ? MASK : (text ?? "").slice(0, 40)}"`;
   if (action.kind === "select") return `select ${action.label.split(" → ").pop()}`;
   return "click";
 }
