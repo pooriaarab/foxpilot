@@ -87,7 +87,7 @@ describe.skipIf(!have)("controller vs Python", () => {
     const parts = await requirements("Find a one-way ticket from New York to San Francisco on the 1st Friday of next month", model, new Date(2026, 8, 25));
     const served = new Set(parts.filter((p) => !p.date).map((p) => p.text));
     const refuse = () => { throw new Error("model called"); };
-    const decision = await choose({ extractEntities: refuse, classify: refuse }, state, [], new Map(), new Set(), parts, served);
+    const decision = await choose({ extractEntities: refuse, classify: refuse, classifyMany: refuse }, state, [], new Map(), new Set(), parts, served);
     expect(decision.target).toBe("Friday, October 2, 2026 , 275 US dollars");
   }, 60_000);
 

@@ -142,15 +142,22 @@ export class Gliner2 {
     return { inputIds, wordPositions, schemaPositions, starts, ends, text };
   }
 
-  /** Runs the graph and reads back only `names`. Every output on the GPU is released. */
-  private async run<K extends Output>(encoded: Encoded, names: K[]): Promise<Record<K, Read>> {
-    const n = encoded.inputIds.length;
-    const long = (values: number[]) => new Tensor("int64", BigInt64Array.from(values, BigInt), [1, values.length]);
+  /**
+   * Runs the graph once on every row and reads back only `names`. Rows are
+   * padded to the longest with 0 (attention mask 0); a row's outputs past its
+   * own label and word counts are padding. Every output on the GPU is released.
+   */
+  private async run<K extends Output>(rows: Encoded[], names: K[]): Promise<Record<K, Read>> {
+    const long = (values: number[][]) => {
+      const n = Math.max(...values.map((row) => row.length));
+      const data = BigInt64Array.from(values.flatMap((row) => [...row, ...new Array<number>(n - row.length).fill(0)]), BigInt);
+      return new Tensor("int64", data, [values.length, n]);
+    };
     const outputs = (await this.model({
-      input_ids: long(encoded.inputIds),
-      attention_mask: long(new Array<number>(n).fill(1)),
-      word_positions: long(encoded.wordPositions),
-      schema_positions: long(encoded.schemaPositions),
+      input_ids: long(rows.map((row) => row.inputIds)),
+      attention_mask: long(rows.map((row) => new Array<number>(row.inputIds.length).fill(1))),
+      word_positions: long(rows.map((row) => row.wordPositions)),
+      schema_positions: long(rows.map((row) => row.schemaPositions)),
     })) as Record<Output, Tensor>;
     try {
       const read = await readBack(names.map((name) => outputs[name]));
@@ -164,22 +171,41 @@ export class Gliner2 {
 
   /** Softmax over the labels, like ClassificationSchema().single(..., activation="softmax"). */
   async classify(text: string, name: string, labels: Labels): Promise<Record<string, number>> {
+    return (await this.classifyMany([text], name, labels))[0]!;
+  }
+
+  /**
+   * classify() for several texts against one prompt and label set, in one run
+   * of the graph and one read back. Each call costs a fixed 300-500 ms in
+   * Firefox (#70); a row adds much less (#90). Rows of one call record the
+   * call's whole time.
+   */
+  async classifyMany(texts: string[], name: string, labels: Labels): Promise<Record<string, number>[]> {
+    if (!texts.length) return [];
     const started = this.recorder ? performance.now() : 0;
-    const encoded = this.encode(text, { name, marker: "[L]", labels });
-    const cls = (await this.run(encoded, ["cls_logits"])).cls_logits.data;
-    const max = Math.max(...cls);
-    const exp = cls.map((x) => Math.exp(x - max));
-    const sum = exp.reduce((a, b) => a + b, 0);
-    const probabilities = Object.fromEntries(Object.keys(labels).map((label, i) => [label, exp[i]! / sum]));
-    this.recorder?.push({ kind: "classify", text, name, labels, output: probabilities, ms: Math.round(performance.now() - started) });
-    return probabilities;
+    const rows = texts.map((text) => this.encode(text, { name, marker: "[L]", labels }));
+    const read = (await this.run(rows, ["cls_logits"])).cls_logits;
+    const width = read.dims[1]!;
+    const names = Object.keys(labels);
+    const results = texts.map((_, row) => {
+      const cls = read.data.slice(row * width, row * width + names.length);
+      const max = Math.max(...cls);
+      const exp = cls.map((x) => Math.exp(x - max));
+      const sum = exp.reduce((a, b) => a + b, 0);
+      return Object.fromEntries(names.map((label, i) => [label, exp[i]! / sum]));
+    });
+    if (this.recorder) {
+      const ms = Math.round(performance.now() - started);
+      texts.forEach((text, row) => this.recorder!.push({ kind: "classify", text, name, labels, output: results[row]!, ms }));
+    }
+    return results;
   }
 
   /** extract_entities(text, types) with include_confidence and include_spans. */
   async extractEntities(text: string, types: Labels, threshold = 0.5): Promise<Record<string, Entity[]>> {
     const started = this.recorder ? performance.now() : 0;
     const encoded = this.encode(text, { name: "entities", marker: "[E]", labels: types });
-    const read = await this.run(encoded, ["count_logits", "span_logits"]);
+    const read = await this.run([encoded], ["count_logits", "span_logits"]);
     const count = read.count_logits.data;
     const span = read.span_logits.data;
     const names = Object.keys(types);

@@ -11,7 +11,7 @@ import { onSite, siteIn, withoutSite } from "../agent/site";
 import { Gliner2, type ModelCall } from "../model/gliner2";
 import { TabGroupStatus } from "./tabgroup";
 
-export const GLINER_MODEL = "onnx-community/gliner2-multi-v1-agent-ONNX";
+export const GLINER_MODEL = "pooria/gliner2-multi-v1-agent-batch-ONNX";
 
 // MV3 forbids remote code and blob: imports, so ONNX Runtime loads from ort/.
 env.useWasmCache = false;

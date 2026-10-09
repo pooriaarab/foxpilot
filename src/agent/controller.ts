@@ -17,6 +17,8 @@ export type Labels = Record<string, string | undefined>;
 export interface Scorer {
   extractEntities(text: string, types: Labels, threshold?: number): Promise<Record<string, { text: string; start?: number }[]>>;
   classify(text: string, name: string, labels: Labels): Promise<Record<string, number>>;
+  /** classify() for each text against the same prompt and labels, in one model call. */
+  classifyMany(texts: string[], name: string, labels: Labels): Promise<Record<string, number>[]>;
 }
 
 export const FLOOR = 0.5;
@@ -469,7 +471,7 @@ async function match(
   return { ordered, results, latency };
 }
 
-/** One scoring pass per requirement, or none at all if every answer is remembered. */
+/** One model call scores every requirement not yet remembered, or none at all if every answer is. */
 async function passOver(
   model: Scorer, ordered: Map<string, Group>, history: HistoryEntry[], texts: string[],
   valueTakers: boolean, memory: Memory,
@@ -483,7 +485,8 @@ async function passOver(
   const fresh = texts.filter((text) => !memory.has(key(text)));
   if (fresh.length) {
     const started = performance.now();
-    for (const text of fresh) memory.set(key(text), await model.classify(text, "referenced", labels));
+    const scored = await model.classifyMany(fresh, "referenced", labels);
+    fresh.forEach((text, i) => memory.set(key(text), scored[i]!));
     latency = Math.round(performance.now() - started);
   }
   return [new Map(texts.map((text) => [text, memory.get(key(text))!])), latency];

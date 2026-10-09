@@ -161,6 +161,7 @@ export class Agent {
         return entities;
       },
       classify: (text, name, labels) => model.classify(text, name, labels),
+      classifyMany: (texts, name, labels) => model.classifyMany(texts, name, labels),
     };
     // Qualifiers ("cheapest", "morning") choose among results; they are not field
     // values. In an ask that dictates values, "time: Morning" is one.
@@ -253,6 +254,11 @@ export class Agent {
       classify: async (text, name, labels) => {
         const started = performance.now();
         try { return await this.model.classify(text, name, labels); }
+        finally { stats.calls++; stats.model += performance.now() - started; stats.labels = Math.max(stats.labels, Object.keys(labels).length); }
+      },
+      classifyMany: async (texts, name, labels) => {
+        const started = performance.now();
+        try { return await this.model.classifyMany(texts, name, labels); }
         finally { stats.calls++; stats.model += performance.now() - started; stats.labels = Math.max(stats.labels, Object.keys(labels).length); }
       },
     };
