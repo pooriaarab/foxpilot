@@ -43,7 +43,7 @@ const browser = await puppeteer.launch({
   browser: "firefox", executablePath: FIREFOX, headless: process.argv.includes("--headless"), userDataDir: join(work, "profile"),
   extraPrefsFirefox: { "extensions.background.idle.timeout": IDLE_MS },
 });
-const layer = () => { const l = document.getElementById("pii-guard-layer"); return l ? { ...l.dataset } : {}; };
+const layer = () => { const l = document.getElementById("pii-guard-layer"); return l ? Object.fromEntries(l.getAttributeNames().filter((n) => n.startsWith("data-")).map((n) => [n.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase()), l.getAttribute(n)])) : {}; };
 
 /** Types one message into a new composer and waits for the model's marks (or the shape-only fallback). */
 async function check(tab, kind, message) {
@@ -56,7 +56,7 @@ async function check(tab, kind, message) {
     const d = await tab.evaluate(layer);
     if (Number(d.seq) > before && Number(d.length) === message.text.length && (d.state === "model" || d.state === "shapes-only")) {
       const spans = JSON.parse(d.spans).map((s) => ({ ...s, text: s.text.replace(/ /g, " ") }));
-      return { kind, text: message.text, state: d.state, modelMs: d.state === "model" ? Number(d.modelMs) : null, afterTypingMs: Date.now() - typed, marks: await tab.$$eval(".pii-mark", (m) => m.length), spans, ...score(message, spans) };
+      return { kind, text: message.text, state: d.state, modelMs: d.state === "model" ? Number(d.modelMs) : null, modelError: d.modelError ?? null, afterTypingMs: Date.now() - typed, marks: await tab.$$eval(".pii-mark", (m) => m.length), spans, ...score(message, spans) };
     }
   }
   return { kind, text: message.text, state: "timeout", spans: [], ...score(message, []) };

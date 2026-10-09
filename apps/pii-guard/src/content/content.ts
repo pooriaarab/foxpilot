@@ -16,13 +16,12 @@ type Read = { text: string; nodes: { node: Text; at: number }[] };
 /** "empty": no text. "shapes": the model has not answered yet. "shapes-only": the model failed. */
 type State = "empty" | "shapes" | "shapes-only" | "model";
 
+/** Email and card numbers come from the shape rules only: they are exact there, and the model guesses. */
 const LABELS: Labels = {
   "person name": "first or last name of a person",
-  email: "email address",
   phone: "phone number",
   "street address": "street or postal address of a home or office",
   "ID number": "passport, social security, licence, tax or account number",
-  "card number": "payment card number",
   "date of birth": "the date a person was born",
   "health condition": "illness, diagnosis, medication or medical condition",
 };
@@ -93,7 +92,17 @@ function shapes(text: string): Span[] {
   return spans;
 }
 
-/** The model's spans, minus the ones that overlap a shape span or a longer model span. */
+/** The model marks some span for most labels ("I" as a name, "3pm" as a phone). Keep the ones with the right shape. */
+function plausible(type: string, span: string, before: string): boolean {
+  const digits = span.replace(/\D/g, "").length;
+  if (type === "person name") return span.split(/\s+/).every((word) => /^\p{Lu}/u.test(word) && /\p{Ll}/u.test(word));
+  if (type === "phone") return digits >= 10;
+  if (type === "ID number") return digits >= 4 && ID_BEFORE.test(before);
+  if (type === "date of birth") return digits > 0;
+  return true;
+}
+
+/** The model's plausible spans, minus the ones that overlap a shape span or a longer model span. */
 function merge(shaped: Span[], found: Record<string, { text: string; start?: number }[]>, text: string): Span[] {
   const spans = [...shaped];
   const free = (s: number, e: number) => spans.every((x) => e <= x.start || s >= x.end);
@@ -101,7 +110,8 @@ function merge(shaped: Span[], found: Record<string, { text: string; start?: num
     const start = e.start ?? text.indexOf(e.text);
     return { type, start, end: Math.min(text.length, start + e.text.length), text: e.text, by: "model" as const };
   }));
-  for (const span of model.filter((s) => s.start >= 0).sort((a, b) => b.end - b.start - (a.end - a.start))) {
+  const kept = model.filter((s) => s.start >= 0 && plausible(s.type, s.text, text.slice(0, s.start)));
+  for (const span of kept.sort((a, b) => b.end - b.start - (a.end - a.start))) {
     if (free(span.start, span.end)) spans.push(span);
   }
   return spans.sort((a, b) => a.start - b.start);
@@ -139,6 +149,8 @@ async function detect(composer: Composer) {
     show(id, merge(shaped, found, modelText), "model");
   } catch (error) {
     console.warn("[pii-guard] model unavailable, shape rules only:", error);
+    // Kept for the E2E report: why the model did not answer.
+    layer.dataset.modelError = String(error instanceof Error ? error.message : error).slice(0, 300);
     show(id, shaped, "shapes-only");
   }
 }
