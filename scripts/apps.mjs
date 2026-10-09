@@ -9,7 +9,7 @@ const steps = {
   build: (app) => ["node", ["scripts/build.mjs", app]],
   // web-ext rejects gecko.update_url unless told the app is self-hosted (unlisted).
   // Bundled model files are data, not code. The linter cannot parse a tokenizer.json over 5 MB.
-  lint: (app) => ["pnpm", ["exec", "web-ext", "lint", ...(selfHosted(app) ? ["--self-hosted"] : []), "--ignore-files", "models/**", "-s", `dist/${app}`]],
+  lint: (app) => ["pnpm", ["exec", "web-ext", "lint", ...(selfHosted(app) ? ["--self-hosted"] : []), "-s", `dist/${app}`]],
 };
 function selfHosted(app) {
   const manifest = JSON.parse(readFileSync(join(root, "apps", app, "public", "manifest.json"), "utf8"));

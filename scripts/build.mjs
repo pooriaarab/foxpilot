@@ -1,7 +1,7 @@
 // Bundles one app from apps/<app>/ into dist/<app>/, as its app.config.mjs says.
 // Usage: node scripts/build.mjs [app] [--watch]. The default app is foxpilot.
 import * as esbuild from "esbuild";
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { models } from "../packages/core/src/model/models.ts";
@@ -52,7 +52,10 @@ if (model?.delivery === "bundle") {
   const cache = await fetchModel(model.name);
   for (const file of Object.keys(model.files)) {
     mkdirSync(dirname(join(dist, "models", model.name, file)), { recursive: true });
-    cpSync(join(cache, file), join(dist, "models", model.name, file));
+    const from = join(cache, file), to = join(dist, "models", model.name, file);
+    // AMO refuses text files over 5 MB (FILE_TOO_LARGE). Indented tokenizer.json is 8.3 MB, minified 4 MB.
+    if (file.endsWith(".json")) writeFileSync(to, JSON.stringify(JSON.parse(readFileSync(from, "utf8"))));
+    else cpSync(from, to);
   }
 }
 
