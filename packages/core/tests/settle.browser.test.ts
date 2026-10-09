@@ -28,7 +28,9 @@ it("waits for a closing picker, not for a click on a day", async () => {
     const t = performance.now(); await (0, eval)(settle)({ kind: "click", node: 1 });
     return { ms: performance.now() - t, open: !!document.getElementById("d") && parseFloat(getComputedStyle(document.getElementById("d")!).opacity) >= 0.05 };
   }, `(${settle})`);
-  expect(done.ms).toBeGreaterThan(300);
+  // The fade crosses 0.05 opacity at about 300 ms, so a bound of 300 failed on timer rounding (299.5 ms).
+  // 200 ms still fails a settle that returns after a frame or two.
+  expect(done.ms).toBeGreaterThan(200);
   expect(done.ms).toBeLessThan(900);
   expect(done.open).toBe(false);
 });
