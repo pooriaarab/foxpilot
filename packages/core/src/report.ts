@@ -6,9 +6,11 @@
 // label/value pairs that name the slot; the page title or URL; the first
 // item of each list for "#1" or "top"; the rest of the page. GLiNER2 takes
 // the span; patterns check codes, money and dates.
-import { nameInjected, type TabBrowser } from "@foxpilot/core/page/browser";
-import type { Scorer } from "./controller";
-import type { Answer } from "./answer";
+import { nameInjected, type TabBrowser } from "./page/browser";
+import type { Scorer } from "./model/scorer";
+
+/** `slots`: the values a report clause asked for, by slot. */
+export type Answer = { text: string; score: number; label?: string; slots?: Record<string, string> };
 
 export type Slot = {
   /** The slot as the ask says it, without articles: "three documents". */

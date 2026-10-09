@@ -6,7 +6,7 @@
 // prompts against 4 single runs; needs the batched export, #90).
 import { env, Tensor } from "@huggingface/transformers";
 import { Gliner2 } from "@foxpilot/core/model/gliner2";
-import type { Labels } from "@foxpilot/core/model/gliner2";
+import type { Labels } from "@foxpilot/core/model/scorer";
 
 const HUB_MODEL = "pooria/gliner2-multi-v1-agent-batch-ONNX";
 const SAME_CALLS = 10;
