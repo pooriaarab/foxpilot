@@ -8,6 +8,13 @@ import type { Model } from "./models";
 export type AppModel = Model & { name: string };
 
 export async function loadModel(model: AppModel, progress_callback?: (info: unknown) => void): Promise<Gliner2> {
+  // MV3 forbids remote code and blob: imports, so ONNX Runtime loads from ort/
+  // (scripts/build.mjs copies it into every app).
+  env.useWasmCache = false;
+  env.backends.onnx.wasm!.wasmPaths = {
+    mjs: chrome.runtime.getURL("ort/ort-wasm-simd-threaded.asyncify.mjs"),
+    wasm: chrome.runtime.getURL("ort/ort-wasm-simd-threaded.asyncify.wasm"),
+  };
   const options = { device: model.device, dtype: model.dtype, progress_callback };
   const Runtime = model.decoder === "gliner25" ? Gliner25 : Gliner2;
   if (model.delivery === "hub") return Runtime.load(model.repo, { ...options, revision: model.revision });
