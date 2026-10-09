@@ -6,7 +6,7 @@
 import { firstDate, resolveDate, sameDate, type IsoDate } from "./dates";
 import type { Action, HistoryEntry, Page } from "./types";
 import { destinationAsk, isSearchField } from "./search";
-import { parseAsk, properName } from "./ask";
+import { parseAsk, properName, ruledOut } from "./ask";
 import { patience } from "./patience";
 import { acceptsAll, declining, refusing, stanceOf, type Control } from "./dialogs";
 import { blocks, CLOSED, type Policy } from "./policy";
@@ -147,6 +147,18 @@ export function nearlyNames(label: string, value: string): boolean {
   return false;
 }
 
+/**
+ * True when the part holds the value as whole words and does not rule it out:
+ * "for Form RV-7" holds rv-7, "NOT Form RV-7A" holds neither rv-7 nor rv-7a.
+ */
+function holds(part: string, value: string): boolean {
+  for (let at = part.indexOf(value); at >= 0; at = part.indexOf(value, at + 1)) {
+    const edge = (c: string | undefined) => !c || !/[\p{L}\p{N}]/u.test(c);
+    if (edge(part[at - 1]) && edge(part[at + value.length]) && !ruledOut(part.slice(0, at))) return true;
+  }
+  return false;
+}
+
 /** The name part of a suggestion ("Marymoor Park    West Lake Sammamish Pkwy NE" → "Marymoor Park"). */
 const nameOf = (label: string) => label.split(/\s{2,}|\n/)[0]!;
 
@@ -193,7 +205,7 @@ export async function requirements(goal: string, model: Scorer, today?: Date): P
         parts.push({ text: part, values: dictated.map((v) => v.value.toLowerCase()), date: null, key: dictated[0]!.key });
         continue;
       }
-      let inPart = [...values].filter((v) => lowered.includes(v)).sort();
+      let inPart = [...values].filter((v) => holds(lowered, v)).sort();
       // Zipline addition: "to Blazing Bagles Redmond" is one place; GLiNER2 kept
       // only "bagles redmond". A short "to/from/at/near …" part keeps its whole object.
       const object = /^(?:from|to|at|near)\s+(.+)$/i.exec(part)?.[1]?.replace(/[.,;:!?]+$/, "").toLowerCase();
@@ -757,8 +769,10 @@ async function suggestion(model: Scorer, ordered: Map<string, Group>, history: H
 /** The requirement of a step that followed a link, and the most such steps in a run. */
 const FOLLOW = "follow link: ";
 const FOLLOW_LIMIT = 6;
-/** Characters of page text after a link that count as its blurb. */
-const BLURB = 120;
+/** The requirement of the step that went up the breadcrumb trail. */
+const PARENT = FOLLOW + "parent page";
+/** An ask for a page beside this one: "its sibling desk in the same section", "another office in the same division". */
+const SIBLING = /\b(?:sibling|other|another|neighbou?ring)\b[^.;]*?\b(?:in|of|under)\s+the\s+same\s+\w+/i;
 
 /** Words with a digit ("RV-7", "22", "DK-100") must match whole; "30-section" is a count, not a code. */
 const codesIn = (text: string) =>
@@ -774,45 +788,56 @@ const contentWords = (text: string) =>
  * reach ("open the Section 22 page", "Form RV-7 instructions") and nothing on
  * this page serves it. Only the destination part of the goal counts; an ask
  * that reports, configures or searches names no page, so no link is followed.
- * A link must share a content word or a code with the ask, so site chrome
- * (Terms, Help, My account) is never a candidate. Its label and blurb are
- * scored by GLiNER2. A code in the ask must match a link's code whole: RV-7 is
- * not RV-7A. A link is followed once, and a run follows at most six.
+ * The page's title is the measure: a link is a candidate when its name and
+ * blurb hold as many of the destination's words and codes as the title does,
+ * and one the title lacks. So site chrome (Terms, Help, My account) is never
+ * one, and a page that is the destination offers none. A code in the ask must
+ * match a link's code whole: RV-7 is not RV-7A. A link the ask names outright
+ * ("the Surface Permits desk") is taken as is; the others are scored by
+ * GLiNER2. For a page beside this one ("its sibling in the same section"),
+ * the run first goes up to the last link of the breadcrumb trail, once. A
+ * link is followed once, and a run follows at most six.
  */
 async function followLink(
-  model: Scorer, state: Page, ordered: Map<string, Group>, history: HistoryEntry[], parts: Part[], goal: string,
+  model: Scorer, state: Page, ordered: Map<string, Group>, history: HistoryEntry[], parts: Part[], goal: string, target: string,
 ): Promise<Chosen | null> {
-  const target = parts.length ? destinationAsk(goal) : null;
-  if (!target) return null;
-  if (history.filter((h) => String(h.requirement ?? "").startsWith(FOLLOW)).length >= FOLLOW_LIMIT) return null;
+  const followed = history.filter((h) => String(h.requirement ?? "").startsWith(FOLLOW));
+  if (followed.length >= FOLLOW_LIMIT) return null;
   const open = [...ordered.values()].filter((g) => g.open);
   // A page with a form to fill still has work for the values of the goal.
   if (parts.some((p) => p.values.length) && open.some((g) => g.takesValue && !isSearchField(execute(g)))) return null;
   const codes = codesIn(target);
-  if (codes.length ? codes.every((c) => codesIn(state.title).includes(c)) : namesValue(state.title, target)) return null;
-
-  const text = state.text.replace(/\s+/g, " ");
-  const blurb = (label: string) => {
-    const at = text.indexOf(label);
-    return at < 0 ? "" : text.slice(at + label.length, at + label.length + BLURB).trim();
-  };
   const wanted = contentWords(target);
+  const matched = (text: string) =>
+    new Set([...[...contentWords(text)].filter((w) => wanted.has(w)), ...codesIn(text).filter((c) => codes.includes(c))]);
+  const title = matched(state.title);
+
   const links = new Map<string, Group>();
+  const crumbs: Group[] = [];
   for (const group of open) {
     const action = execute(group);
     if (action.kind !== "click" || action.role !== "link" || action.dialog || isUnsafe(action)) continue;
     if (/footer/.test(action.section ?? "")) continue;
+    if (action.crumb) crumbs.push(group);
     const label = clean(action.label);
-    const words = [...contentWords(`${label} ${blurb(label)}`)];
-    const shares = words.some((w) => wanted.has(w)) || codes.some((c) => codesIn(`${label} ${blurb(label)}`).includes(c));
-    if (shares && !links.has(label)) links.set(label, group);
+    const found = matched(`${label} ${action.blurb ?? ""}`);
+    if (found.size < title.size || ![...found].some((w) => !title.has(w))) continue;
+    // Codes: only links that hold every code whole are candidates.
+    if (codes.length && !codes.every((c) => codesIn(label).includes(c))) continue;
+    if (!links.has(label)) links.set(label, group);
   }
-  // Codes: only links that hold every code whole are candidates.
-  let kept = [...links.keys()];
-  if (codes.length) kept = kept.filter((label) => codes.every((c) => codesIn(label).includes(c)));
-  kept = kept.slice(0, LABEL_CAP);
+  const named = [...links].filter(([label]) => contentWords(label).size >= 2 && namesValue(target, label));
+  if (named.length) {
+    const [label, group] = named.sort((a, b) => b[0].length - a[0].length)[0]!;
+    return { requirement: FOLLOW + clean(label, 60), score: 1.0, group };
+  }
+  const parent = crumbs[crumbs.length - 1];
+  if (parent && SIBLING.test(goal) && !followed.some((h) => h.requirement === PARENT)) {
+    return { requirement: PARENT, score: 1.0, group: parent };
+  }
+  const kept = [...links.keys()].slice(0, LABEL_CAP);
   if (!kept.length) return null;
-  const labels: Labels = Object.fromEntries(kept.map((label) => [label, blurb(label) || undefined]));
+  const labels: Labels = Object.fromEntries(kept.map((label) => [label, execute(links.get(label)!).blurb || undefined]));
   const [label, score] = top(await model.classify(clean(target, 300), "destination", labels));
   if (score < FLOOR) return null;
   return { requirement: FOLLOW + clean(target, 60), score, group: links.get(label)! };
@@ -856,8 +881,13 @@ export async function choose(
   const committing = picked.length ? null : await suggestion(model, ordered, history, parts);
   chosen = committing ? [committing] : ((await dialog(model, ordered, chosen, history, allParts, rules)) ?? chosen);
   const commits = Boolean(committing);
-  if (!chosen.length) {
-    const following = await followLink(model, state, ordered, history, parts, goal);
+  // Zipline addition: when the ask names a page to reach, followLink alone
+  // follows links. The other parts score site chrome ("Main Page", "All
+  // Forms") as high as 0.9, and following them walks away from the page.
+  const target = parts.length ? destinationAsk(goal) : null;
+  if (target && !commits) chosen = chosen.filter((c) => execute(c.group).role !== "link" || execute(c.group).dialog);
+  if (target && !chosen.length) {
+    const following = await followLink(model, state, ordered, history, parts, goal, target);
     if (following) chosen = [following];
   }
 

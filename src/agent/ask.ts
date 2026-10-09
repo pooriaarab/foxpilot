@@ -37,6 +37,14 @@ const SHAPES: [Kind, RegExp, string][] = [
   ["count", /\b(\d{1,3})\s+(?:x\s+)?of\s+(?:the\s+)?[\p{L}\p{N}][^,.;]*/giu, "quantity"],
 ];
 
+/** A value the ask rules out ("NOT Form RV-7A", "other than Plan B") is not one to type. */
+const RULED_OUT = /\b(?:not|never|avoid|except|excluding|other\s+than|rather\s+than|instead\s+of)\s+(?:[\p{L}\p{N}'-]+\s+){0,2}$/iu;
+
+/** True when the text just before a value rules the value out. */
+export function ruledOut(before: string): boolean {
+  return RULED_OUT.test(before);
+}
+
 /** "Fill it out with: name: Maya, email: …": a key is 1-4 words after a break. */
 const KEY = /(?<=^|[,:;.!?]\s*)([A-Za-z][A-Za-z'/-]*(?: [A-Za-z'/-]+){0,3}):\s+/g;
 
@@ -94,7 +102,8 @@ export function parseAsk(goal: string): Ask {
   for (const m of text.matchAll(QUOTED)) {
     const start = m.index!;
     const end = start + m[0].length;
-    if (!free(start, end) || CONTROL_AFTER.test(text.slice(end)) || CONTROL_BEFORE.test(text.slice(0, start))) continue;
+    if (!free(start, end) || CONTROL_AFTER.test(text.slice(end)) || CONTROL_BEFORE.test(text.slice(0, start)) ||
+        ruledOut(text.slice(0, start))) continue;
     values.push({ key: keyOf(text, start, end, "text"), value: (m[1] ?? m[2] ?? m[3]!).trim(), kind: "quoted", start, end });
     taken.push([start, end]);
   }
@@ -102,7 +111,7 @@ export function parseAsk(goal: string): Ask {
     for (const m of text.matchAll(shape)) {
       const start = m.index! + (m[1] ? m[0].indexOf(m[1]) : 0);
       const value = m[1] ?? m[0];
-      if (!free(m.index!, m.index! + m[0].length)) continue;
+      if (!free(m.index!, m.index! + m[0].length) || ruledOut(text.slice(0, start))) continue;
       values.push({ key: kind === "code" ? keyOf(text, start, start + value.length, name) : name, value, kind, start, end: start + value.length });
       taken.push([m.index!, m.index! + m[0].length]);
     }

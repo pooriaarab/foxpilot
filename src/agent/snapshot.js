@@ -69,6 +69,9 @@ export function snapshot() {
       if (['checkbox','radio'].includes(e.type)) return e.type;
       if (['button','submit','reset','image'].includes(e.type)) return 'button';
       if (e.type==='search') return 'searchbox';
+      // A bare box in a form that goes to a search page is a search box, named or not.
+      if (e.type==='text' && (e.closest('[role="search"]') ||
+          /search/i.test(e.form?.getAttribute('action')||'') || /^(?:q|query|search)$/i.test(e.name))) return 'searchbox';
       if (e.type==='number') return 'spinbutton';
       if (['text','email','url','tel','password'].includes(e.type)) return 'textbox';
     }
@@ -96,6 +99,18 @@ export function snapshot() {
       e.getAttribute('aria-expanded'),e.getAttribute('aria-checked'),e.getAttribute('aria-selected'),
       e.getAttribute('href'),scope?.innerText?.slice(0,6000)||''];
   };
+  // The words next to a link: its list item, row or card. A directory lists
+  // "Assessment Standards Division -- inspects sites ... ground works", and the
+  // link name alone does not say what is under it. A menu item has none.
+  const blurb = (e,label) => {
+    const item=e.closest('li,tr,dd,article,[role="listitem"],[role="row"]');
+    if (!item || item.querySelectorAll('a[href]').length>2) return '';
+    return item.innerText.replace(label,'').replace(/\s+/g,' ').replace(/^[\s\u2014\u2013:,.()-]+/,'').trim().slice(0,160);
+  };
+  // A link in a breadcrumb trail: a breadcrumb landmark, or a link followed by
+  // a ">" separator ("Directory > Field Operations > Ground Works > Desk").
+  const crumb = e => !!e.closest('[aria-label*="breadcrumb" i],[class*="breadcrumb" i],[id*="breadcrumb" i]') ||
+    /^\s*[>\u203a\u00bb\u2192]/.test(e.nextSibling?.textContent||'');
   // Associate autocomplete popups using the page's ARIA relationships, not
   // site-specific markup. A grid popup and a listbox are both valid patterns.
   const popups=[];
@@ -140,6 +155,11 @@ export function snapshot() {
     if (off) base.offscreen=true;
     if (inDialog(e)) base.dialog=true;
     if (secret(e)) base.secret=true;
+    if (rname==='link') {
+      const near=blurb(e,base.label);
+      if (near) base.blurb=near;
+      if (crumb(e)) base.crumb=true;
+    }
     // A link back to the page you are already on advances nothing. Site headers
     // are full of them, and they read exactly like the task that brought you here.
     const here=location.href.replace(/#.*$/,'');
