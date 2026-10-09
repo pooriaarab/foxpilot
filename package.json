@@ -16,6 +16,7 @@
     "lint:ext": "node scripts/apps.mjs lint",
     "ci:local": "pnpm typecheck && pnpm test && node scripts/apps.mjs build && pnpm lint:ext",
     "e2e": "pnpm build && node scripts/e2e.mjs",
+    "e2e:pii": "node scripts/build.mjs pii-guard && node apps/pii-guard/e2e/run.mjs",
     "bench:firefox": "node bench/run.mjs",
     "eval": "pnpm build && node scripts/zoo/cli.mjs"
   },

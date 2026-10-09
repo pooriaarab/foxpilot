@@ -27,7 +27,7 @@ const CONTROL_AFTER = /^\s+(?:button|link|tab|icon|menu|checkbox)\b/i;
 const CONTROL_BEFORE = /\b(?:click|press|tap|hit|open)\s+(?:on\s+)?(?:the\s+)?$/i;
 
 /** Shapes, in priority order: an earlier shape wins an overlap. Group 1, when present, is the value. */
-const SHAPES: [Kind, RegExp, string][] = [
+export const SHAPES: [Kind, RegExp, string][] = [
   ["email", /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g, "email"],
   ["card", /(?<!\d)\d{4}(?:[ -]?\d{4}){3}(?!\d)/g, "card number"],
   ["phone", /(?<![\d-])(?:\+?1[ .-]?)?(?:\(\d{3}\)\s?|\d{3}[ .-])\d{3}[ .-]\d{4}(?![\d-])/g, "phone"],
