@@ -52,7 +52,7 @@ try {
   record.firefox = await session.version();
   const tabId = await session.openTask(url);
   ({ modelLoadMs: record.modelLoadMs } = await session.ready());
-  console.log(`gliner: loaded in ${(record.modelLoadMs / 1000).toFixed(1)} s`);
+  console.log(`foxmind: loaded in ${(record.modelLoadMs / 1000).toFixed(1)} s`);
   const result = await session.run(goal, { tabId, llm: useLlm, record: recording });
   // The task's url stays the record's url; where the run ended is finalUrl.
   Object.assign(record, result, { url, finalUrl: result.url });

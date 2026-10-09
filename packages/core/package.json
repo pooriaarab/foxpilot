@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "foxpilot shared code: the GLiNER2 runtime, the page kit and the safety rules. Ships TypeScript source.",
+  "description": "foxpilot shared code: the foxmind (GLiNER2) runtime, the page kit and the safety rules. Ships TypeScript source.",
   "exports": {
     "./*.js": "./src/*.js",
     "./*": "./src/*.ts"

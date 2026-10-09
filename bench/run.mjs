@@ -216,7 +216,7 @@ const meaning = [
 const md = [
   `# Where GLiNER2's per-call time goes: ${version}`,
   ``,
-  `Model pooria/gliner2-multi-v1-agent-batch-ONNX. Times are ms per call. hardwareConcurrency ${results.find((r) => r.hardwareConcurrency)?.hardwareConcurrency ?? "-"}.`,
+  `Model pooria/foxmind. Times are ms per call. hardwareConcurrency ${results.find((r) => r.hardwareConcurrency)?.hardwareConcurrency ?? "-"}.`,
   ``,
   `## What this means`,
   ``,

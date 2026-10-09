@@ -1,6 +1,6 @@
 # foxpilot
 
-An on-device browser agent for Firefox. [GLiNER2](https://github.com/fastino-ai/GLiNER2) runs on your GPU with WebGPU, reads the page and drives it until your goal is done. No server, no API key. Nothing about the page or your goal leaves the browser.
+An on-device browser agent for Firefox. foxmind, a model built on [GLiNER2](https://github.com/fastino-ai/GLiNER2), runs on your GPU with WebGPU, reads the page and drives it until your goal is done. No server, no API key. Nothing about the page or your goal leaves the browser.
 
 foxpilot is a port of [shreyaskarnik/zipline](https://github.com/shreyaskarnik/zipline), a Chrome extension. Two things changed. The UI is a Firefox sidebar instead of a Chrome side panel. Actions run in the page through `scripting.executeScript` and in-page events instead of the Chrome DevTools Protocol, so Firefox shows no "started debugging this browser" bar. It needs Firefox 157 or later. The rest of the upstream design is unchanged.
 
@@ -12,7 +12,7 @@ Firefox timings are not published yet. The Chrome numbers in zipline do not appl
 
 It is a port of [gliner2-ultrafast](https://github.com/sahibzada-allahyar/gliner2-ultrafast) (MIT) from Python to a browser extension:
 
-- **GLiNER2 decides.** One model, [`fastino/gliner2-multi-v1`](https://huggingface.co/fastino/gliner2-multi-v1), does two jobs. It extracts values from the goal ("New York", "October 9, 2026"). It also scores the controls on the page against each part of the goal. It runs as a single ONNX graph ([`pooria/gliner2-multi-v1-agent-batch-ONNX`](https://huggingface.co/pooria/gliner2-multi-v1-agent-batch-ONNX), 614 MB at fp16). The graph has a batch axis, so one call scores every part of the goal.
+- **foxmind decides.** One model, foxmind, built on [`fastino/gliner2-multi-v1`](https://huggingface.co/fastino/gliner2-multi-v1), does two jobs. It extracts values from the goal ("New York", "October 9, 2026"). It also scores the controls on the page against each part of the goal. It runs as a single ONNX graph ([`pooria/foxmind`](https://huggingface.co/pooria/foxmind), 614 MB at fp16). The graph has a batch axis, so one call scores every part of the goal.
 - **Code controls.** Explicit rules handle requirement order, one-to-one matching of requirements to controls, autocompletes, calendars, form submission and termination. They are ported from the Python controller (`packages/agent/src/controller.ts`). The model picks among observed controls. It never writes selectors or code.
 - **The page acts.** foxpilot reads the page with the original `snapshot.js`. It sends clicks and typing as in-page events through `scripting.executeScript`. Before every action, it checks that the page has not changed since the decision.
 - **Field text, two ways.** By default, foxpilot types the value that GLiNER extracted for that part of the goal. If you switch on *Local LLM*, Qwen3-0.6B (WebGPU, about 0.5 GB) writes the value from the goal, the requirement and the GLiNER candidates.
@@ -37,14 +37,14 @@ pnpm build            # writes dist/foxpilot/
 
 1. In Firefox, open `about:debugging#/runtime/this-firefox`.
 2. Click **Load Temporary Add-on** and choose `dist/foxpilot/manifest.json`.
-3. Click the foxpilot toolbar button to open the sidebar. On the first run, GLiNER2 downloads (614 MB) and is cached. The download happens once.
+3. Click the foxpilot toolbar button to open the sidebar. On the first run, foxmind downloads (614 MB) and is cached. The download happens once.
 4. Pick an example (it opens the page), or type your own goal for the current tab. Then click **Run**.
 
 A temporary add-on is removed when you close Firefox. Load it again for the next session.
 
 ## Use foxpilot from an agent (MCP)
 
-`foxpilot mcp` is an MCP server on stdio. It starts one Firefox on the first tool call. GLiNER2 loads once and stays warm.
+`foxpilot mcp` is an MCP server on stdio. It starts one Firefox on the first tool call. foxmind loads once and stays warm.
 
 ```bash
 pnpm build
