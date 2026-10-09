@@ -6,6 +6,7 @@
 // no value ("one-way ticket") and recognises error, captcha and empty pages;
 // matching is literal, like the controller's, except on a field the page
 // renamed after the agent committed it.
+import { parseAsk } from "./ask";
 import { nearlyNames, namesValue, unsentForms, type Part, type Scorer } from "./controller";
 import { firstDate } from "./dates";
 import type { Action, HistoryEntry, Page } from "./types";
@@ -125,4 +126,39 @@ export async function verify(model: Scorer, page: Page, parts: Part[], history: 
   const kind = await model.classify(`${page.title}. ${page.text.slice(0, 500)}`, "page", PAGE);
   const problem = (kind.problem ?? 0) >= 0.7 ? `the page looks like an error, empty result or captcha (${Math.round(kind.problem! * 100)}%)` : undefined;
   return { verified: !problem && checks.every((c) => c.ok), checks, problem };
+}
+
+/** A field to type again, with the value the page's error text gave for it. */
+export type Refill = { action: Action; text: string; requirement: string | null };
+
+/** A line that asks for something else: "Use your work address …", "Must be the 5-digit ZIP 60614". */
+const CORRECTION = /\b(?:use|must|should|enter|expected|instead|invalid|required|needs?|not)\b/i;
+const SHAPED = new Set(["email", "card", "phone", "cvv", "expiry", "zip", "code"]);
+
+/**
+ * After a send: the fields the page's new text corrects. A new line that reads
+ * as a correction and holds a value of one field's shape (email, ZIP, phone,
+ * card, code), different from what was typed there, gives that field its value.
+ * The shape of a field comes from its label and what was typed ("Work email",
+ * "Company ZIP code: 60614-2210"). Fields the text does not name keep their value.
+ */
+export function corrections(before: string, page: Page, history: HistoryEntry[]): Refill[] {
+  const old = new Set(before.split("\n"));
+  const offered = page.text.split("\n").filter((line) => !old.has(line) && CORRECTION.test(line))
+    .flatMap((line) => parseAsk(line).values.filter((v) => SHAPED.has(v.kind)));
+  const typed = page.actions.flatMap((action) => {
+    if (action.kind !== "fill" || !action.value) return [];
+    const entry = [...history].reverse().find((h) => h.kind === "fill" && h.text && h.node === action.node && h.document_id === action.document_id);
+    if (!entry) return [];
+    const label = action.label.replace(/[^\p{L}\p{N} ]+/gu, " ").replace(/\s+/g, " ").trim();
+    const kind = parseAsk(`${label}: ${entry.text}`).values.find((v) => SHAPED.has(v.kind))?.kind;
+    return kind ? [{ action, kind, entry }] : [];
+  });
+  const refills: Refill[] = [];
+  for (const { action, kind, entry } of typed) {
+    if (typed.filter((t) => t.kind === kind).length !== 1) continue;
+    const value = offered.find((v) => v.kind === kind && v.value.toLowerCase() !== entry.text!.toLowerCase())?.value;
+    if (value) refills.push({ action, text: value, requirement: entry.requirement ?? null });
+  }
+  return refills;
 }

@@ -81,17 +81,18 @@ export function policy(ask: string): Policy {
   return { allowed, prohibited, password };
 }
 
-/** A prohibition names the control: by a quoted label, by every word of the label, or by its verb. */
+/** A prohibition names the control: by a quoted label, by every word of the label, or by the label's verb. */
 function forbids(prohibition: string, label: string): boolean {
   const lowered = label.toLowerCase();
   for (const [, quoted] of prohibition.matchAll(/["“']([^"”']+)["”']/g)) {
     if (quoted && lowered.includes(quoted.toLowerCase().trim())) return true;
   }
-  const said = new Set(words(prohibition));
-  const named = words(label).filter((w) => !STOP.has(w));
+  const stem = (word: string) => word.replace(/s$/, "");
+  const said = new Set(words(prohibition).map(stem));
+  const named = words(label).filter((w) => !STOP.has(w)).map(stem);
   if (named.length && named.every((w) => said.has(w))) return true;
-  const verb = words(prohibition)[0];
-  return Boolean(verb && !GENERIC.has(verb) && named[0] === verb);
+  // The label's own verb: "do NOT press the final Submit button" forbids "Submit request".
+  return Boolean(named[0] && !GENERIC.has(named[0]) && said.has(named[0]));
 }
 
 /** True when the ask does not allow this control. */
