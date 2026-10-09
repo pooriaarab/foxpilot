@@ -86,3 +86,17 @@ jobs:
           fi
           gh release create "$TAG" "${FILES[@]}" --target "$GITHUB_SHA" \
             --title "$TAG" --generate-notes
+      - name: Publish the self-update manifest (unlisted apps)
+        if: matrix.channel == 'unlisted'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          APP="${{ matrix.app }}"; TAG="$APP-v${{ matrix.version }}"
+          FILES=("web-ext-artifacts/$APP"/*.xpi); XPI="${FILES[0]}"
+          SHA=$(sha256sum "$XPI" | cut -d' ' -f1)
+          URL="https://github.com/${{ github.repository }}/releases/download/$TAG/$(basename "$XPI")"
+          # One fixed "updates" release holds every app's update manifest.
+          gh release view updates >/dev/null 2>&1 || gh release create updates --title "Update manifests" --notes "Self-update manifests for unlisted apps."
+          gh release download updates --pattern "$APP-updates.json" --clobber || true
+          node scripts/release/updates.mjs "$APP" "${{ matrix.version }}" "$URL" "$SHA"
+          gh release upload updates "$APP-updates.json" --clobber
