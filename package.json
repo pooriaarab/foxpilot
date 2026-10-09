@@ -21,6 +21,7 @@
   },
   "license": "MIT",
   "dependencies": {
+    "@foxpilot/core": "workspace:*",
     "@huggingface/transformers": "^4.3.0",
     "@modelcontextprotocol/sdk": "^1.32.1",
     "zod": "^4.6.5"
