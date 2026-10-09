@@ -9,7 +9,7 @@ import { strike } from "@foxpilot/core/page/actuate";
 import { settle } from "@foxpilot/core/page/settle";
 import { snapshot } from "@foxpilot/core/page/snapshot.js";
 import type { Action } from "@foxpilot/core/page/types";
-import { dialogs, plan, type Plan, type Step } from "./plan";
+import { dialogs, leaves, plan, type Plan, type Step } from "./plan";
 import type { Report } from "./store";
 
 /** The snapshot's own node map (snapshot.js). It lives in this script's view of window, not the page's. */
@@ -95,6 +95,7 @@ async function attempt(element: Element, step: Step): Promise<string> {
   // The hard guard. plan() never offers these; here the label on screen is checked again.
   const name = `${step.label} ${target.getAttribute("aria-label") ?? ""} ${target.textContent ?? ""}`;
   if (step.kind === "toggle" ? !isOn(target) || required(name) : acceptsAll(name)) return `refused to press "${step.label}"`;
+  if (leaves(target)) return `refused to follow the link "${step.label}"`;
   // Bring the control to the middle, clear of a sticky button bar at the dialog's edge.
   target.scrollIntoView({ block: "center" });
   await new Promise((resolve) => setTimeout(resolve, 50));
