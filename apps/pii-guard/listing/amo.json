@@ -1,1 +1,21 @@
-{"channel": "listed"}
+{
+  "channel": "listed",
+  "summary": {
+    "en-US": "Underlines personal data in the message box on AI chat sites and asks before you send it. Redact it with tags such as [NAME_1], send anyway, or cancel. A small model runs on your device, and nothing leaves your browser."
+  },
+  "description": {
+    "en-US": "PII Guard checks the message you type into an AI chat before you send it. It underlines personal data in the message box. If you send a message that has personal data, it stops the send and asks what to do.\n\nIt works on these sites:\n- chatgpt.com and chat.openai.com\n- claude.ai\n- gemini.google.com\n- copilot.microsoft.com\n- chat.mistral.ai\n- perplexity.ai and www.perplexity.ai\n\nWhat it looks for:\n- names\n- email addresses\n- phone numbers\n- card numbers\n- street addresses\n- dates of birth\n- ID numbers, such as passport, social security, licence, tax or account numbers\n- health conditions\n\nFixed patterns find email addresses, card numbers and North American phone numbers as you type. A small language model, foxmind-small, then finds names, addresses and the other types. An ID number gets a mark only when a word such as \"passport\" or \"account\" comes before it. The toolbar button shows how many items are marked.\n\nWhen you press Enter or the site's Send button and the message has marked items, PII Guard shows three choices:\n- Redact and send: puts a numbered tag, such as [NAME_1] or [EMAIL_1], in place of each item, then sends. The same value gets the same tag every time it appears.\n- Send anyway: sends the message as you typed it.\n- Cancel: keeps the message in the box so you can edit it. Escape does the same.\n\nYour text stays in your browser. The model ships inside the add-on and runs on your computer with WebAssembly. The page passes your text only to the add-on's own background page. PII Guard makes no network requests, stores no text and collects no data.\n\nWe tested PII Guard in Firefox on 40 test messages. Precision was 1.0 for most types and 0.75 for street addresses. Recall was 0.67 to 1.0, depending on the type. Once the model has loaded, one check takes about 205 ms.\n\nWhat it misses:\n- some phone number formats (the fixed pattern knows only North American numbers, so the model must find the rest)\n- some social security numbers\n- drug names\n- text after the first 20,000 characters (the model reads only the first 1,500)\n\nThe model is trained for short English text, so other languages get fewer marks. If you send a message within about half a second of your last key, and the message has a name but no email, phone or card number, the model may not have answered yet. That message goes through without a prompt.\n\nPII Guard can miss personal data. Read your message before you send it. The popup has no settings yet.\n\nPII Guard is open source under the MIT license. The source, the build steps and the test suite are at https://github.com/pooriaarab/foxpilot/tree/main/apps/pii-guard"
+  },
+  "categories": [
+    "privacy-security"
+  ],
+  "homepage": {
+    "en-US": "https://github.com/pooriaarab/foxpilot/tree/main/apps/pii-guard"
+  },
+  "support_url": {
+    "en-US": "https://github.com/pooriaarab/foxpilot/issues"
+  },
+  "version": {
+    "license": "MIT"
+  }
+}
