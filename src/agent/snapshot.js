@@ -73,7 +73,7 @@ export function snapshot() {
       if (e.type==='text' && (e.closest('[role="search"]') ||
           /search/i.test(e.form?.getAttribute('action')||'') || /^(?:q|query|search)$/i.test(e.name))) return 'searchbox';
       if (e.type==='number') return 'spinbutton';
-      if (['text','email','url','tel','password'].includes(e.type)) return 'textbox';
+      if (['text','email','url','tel','password','date'].includes(e.type)) return 'textbox';
     }
     return null;
   };

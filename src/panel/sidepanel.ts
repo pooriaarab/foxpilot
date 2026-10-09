@@ -413,6 +413,7 @@ async function run({ goal, tabId, llm: useLlm = false, record = false }: RunOpti
         reporter.seen(view.history.length);
       },
       calls,
+      (steps) => reporter.found(steps),
     );
     const loopStart = performance.now();
     const page = await browser.evaluate(pageInfo).catch(() => null);

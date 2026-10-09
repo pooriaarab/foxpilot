@@ -27,6 +27,8 @@ type Reading = {
   pairs: { label: string; value: string }[];
   lists: { head: string; items: string[]; changed: boolean }[];
   blocks: string[];
+  /** All visible text, headers and footers too. */
+  text: string;
 };
 
 // The verb, not the noun: "and report the sum", never "the five report pages" or "get a quote".
@@ -83,7 +85,7 @@ function kindOf(name: string, count?: number): Slot["kind"] {
   if (/^how (?:many|much)\b/.test(n)) return "text";
   if ((count ?? 1) > 1 || (/s$/.test(last) && !/(?:ss|us|is)$/.test(last) && last.length > 3)) return "list";
   if (/\b(?:code|id|reference|ref|hash|token|key|pin|serial)\b|\b(?:confirmation|order|request|permit|tracking|case|account|ticket) number\b/.test(n)) return "code";
-  if (/\b(?:total|price|cost|amount|fee|balance|subtotal|charge|refund|fare)\b/.test(n)) return "money";
+  if (/\b(?:total|price|cost|amount|fee|balance|subtotal|charge|refund|fare|premium)\b/.test(n)) return "money";
   if (/\b(?:date|day|deadline)\b/.test(n)) return "date";
   return "text";
 }
@@ -206,7 +208,7 @@ function readPage(): Reading {
     lists.push({ head, items, changed: log.some((c) => l.contains(c.el) || c.el.contains(l)) });
   }
   const h1 = document.querySelector('h1');
-  return { url: location.href, title: document.title, h1: h1 ? words(h1) : '', changed, pairs, lists, blocks };
+  return { url: location.href, title: document.title, h1: h1 ? words(h1) : '', changed, pairs, lists, blocks, text: words(document.body).slice(0, 20000) };
 }
 
 nameInjected({ readPage });
@@ -219,6 +221,8 @@ export class Reporter {
   private reading: Promise<void> | null = null;
   private steps = -1;
   private calls = 0;
+  /** The text of every reading, by the number of actions taken when it was read. */
+  private shown = new Map<number, string>();
 
   /** The ask's words: among blocks that name a slot equally, the one nearer the ask comes first. */
   private asked: string;
@@ -238,6 +242,7 @@ export class Reporter {
   private async look(): Promise<void> {
     try {
       const page = await this.browser.evaluate(readPage);
+      this.shown.set(this.steps, `${this.shown.get(this.steps) ?? ""}\n${page.text}`);
       const key = `${page.url} ${page.title} ${page.h1}`;
       this.readings.delete(key);
       this.readings.set(key, page);
@@ -246,6 +251,34 @@ export class Reporter {
     } finally {
       this.reading = null;
     }
+  }
+
+  /**
+   * True when the page now shows every slot the ask asks for, each in text that
+   * changed during the run, on no reading before action `steps` and not in the
+   * ask (a ZIP the ask dictates is not the site's code): the run can end. Only
+   * code, money and date slots can be judged this way; for an ask with another
+   * kind of slot, or none, it is null.
+   */
+  async found(steps: number): Promise<boolean | null> {
+    if (!this.slots.length || this.slots.some((s) => !PATTERNS[s.kind])) return null;
+    await this.reading;
+    const before = [...this.shown].filter(([step]) => step < steps).map(([, text]) => text).join("\n");
+    this.steps = steps;
+    await this.look();
+    const page = [...this.readings.values()].pop();
+    if (!page) return false;
+    this.calls = 0;
+    for (const slot of this.slots) {
+      let value: string | null = null;
+      for (const change of page.changed.filter((c) => !c.gone).slice(0, 6)) {
+        value = await this.span(slot, change.text, true);
+        if (value && !before.includes(value) && !this.asked.toLowerCase().includes(value.toLowerCase())) break;
+        value = null;
+      }
+      if (!value) return false;
+    }
+    return true;
   }
 
   async report(): Promise<Answer | null> {

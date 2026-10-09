@@ -247,6 +247,10 @@ export function isUnsafe(action: Action, rules: Policy = CLOSED): boolean {
   return blocks(rules, action);
 }
 
+/** Zipline addition: a step of the ask that forbids something ("do NOT press the final Submit button") is not a requirement. */
+const NEGATION = /\b(?:do\s+not|don['’]?t|never|avoid)\b/i;
+const stem = (word: string) => word.toLowerCase().replace(/s$/, "");
+
 /**
  * Zipline addition: a bare "Search" or "Submit" button sends the form; it is
  * not what a part of the goal refers to. On Google Flights, "Search" (0.66)
@@ -690,24 +694,31 @@ async function unsentForm(
   model: Scorer, state: Page, ordered: Map<string, Group>, history: HistoryEntry[], chosen: Chosen[], rules: Policy,
 ): Promise<Chosen | null> {
   const pending = unsentForms(state, history);
-  if (!pending.size) return null;
-  const inPending = (form: unknown) => form != null && pending.has(JSON.stringify(form));
   // A form whose submit button the ask forbids ("do NOT press the final
   // Submit button") is not sent at all: Enter would press that button too.
+  // Zipline addition: a form with a control the goal still sets is sent once
+  // it is set (a step had one value of three).
   for (const group of ordered.values()) {
     const action = execute(group);
-    if (action.submit && inPending(action.form) && isUnsafe(action, rules)) pending.delete(JSON.stringify(action.form));
+    if (action.form == null) continue;
+    if ((action.submit && isUnsafe(action, rules)) || (!action.submit && chosen.some((c) => c.group === group))) {
+      pending.delete(JSON.stringify(action.form));
+    }
   }
   if (!pending.size) return null;
+  const inPending = (form: unknown) => form != null && pending.has(JSON.stringify(form));
+  // A button pressed before is pressed again when its form changed since (the
+  // server refused a field and it was corrected), at most REPEATS times.
+  const again = (action: Action) => editedSince(action, history) && presses(action, history) < REPEATS;
   for (const group of ordered.values()) {
     const action = execute(group);
-    if (group.open && action.submit && inPending(action.form)) return { requirement: null, score: 1.0, group };
+    if ((group.open || again(action)) && action.submit && inPending(action.form)) return { requirement: null, score: 1.0, group };
   }
   if (chosen.length) return null;
   const buttons = new Map<string, Group>();
   for (const group of ordered.values()) {
     const action = execute(group);
-    const usable = group.open || (sends(action) && editedSince(action, history));
+    const usable = group.open || (sends(action) && again(action));
     if (usable && action.kind === "click" && inPending(action.form) && !isUnsafe(action, rules)) buttons.set(clean(action.label), group);
   }
   if (!buttons.size) return enter(state);
@@ -843,6 +854,115 @@ async function followLink(
   return { requirement: FOLLOW + clean(target, 60), score, group: links.get(label)! };
 }
 
+const PLAIN = new Set(["a", "an", "the", "of", "or", "and", "to", "in", "on", "for", "with", "by", "at"]);
+
+/**
+ * Zipline addition: a choice the ask names outright. On each step of a wizard,
+ * served part or not: a radio button whose words are all in one step of the
+ * ask ("Detached house" in "a detached house, heated", "Yes" in "new patient:
+ * Yes"), and a box to tick that names a step's object ("and give consent").
+ * Of rows that share one action ("Manage A record www", "Manage A record
+ * oldpanel"), the one row the ask's value names; of cards that share one
+ * button ("Add to Cart"), the one whose text names it, when the ask says the verb.
+ */
+function named(state: Page, ordered: Map<string, Group>, parts: Part[], rules: Policy): Chosen | null {
+  const words = (text: string) => wordsOf(text).map(stem).filter((w) => !PLAIN.has(w));
+  const open = [...ordered.values()].filter((g) => {
+    const action = execute(g);
+    return g.open && action.kind === "click" && action.checked !== "true" && !isUnsafe(action, rules);
+  });
+  const steps = parts.map((p) => words(p.text));
+  for (const group of open) {
+    const action = execute(group);
+    const label = words(action.label);
+    if (action.role === "radio" && label.length && steps.some((s) => label.every((w) => s.includes(w)))) return { requirement: null, score: 1.0, group };
+    if (action.role === "checkbox" && parts.some((p, i) => !p.values.length && label.includes(steps[i]!.at(-1) ?? ""))) return { requirement: null, score: 1.0, group };
+  }
+  const verb = (group: Group) => wordsOf(execute(group).label)[0];
+  const all = [...ordered.values()];
+  const values = parts.flatMap((p) => p.values);
+  // The text of the card or row around a control (snapshot.js keeps it in the guard).
+  const card = (group: Group) => String((state.guards[String(execute(group).node)] as unknown[] | null)?.at(-1) ?? "");
+  // The ask says what to do to the card: "add one … to the cart".
+  const said = new Set(steps.flat());
+  const asked = (group: Group) => new RegExp(`^(?:${VERBS})$`).test(verb(group) ?? "") && said.has(stem(verb(group)!));
+  const rows = all.filter((g) => all.filter((o) => verb(o) === verb(g)).length >= 3 && values.some((v) =>
+    namesValue(execute(g).label, v) || (asked(g) && namesValue(card(g), v))));
+  // "Add to Cart" in the card that names the product, before the product's own
+  // link; once it is pressed, the row is done.
+  const doing = rows.filter(asked);
+  if (doing.some((g) => !g.open)) return null;
+  const pick = (doing.length ? doing : rows).filter((g) => open.includes(g));
+  return pick.length === 1 ? { requirement: null, score: 1.0, group: pick[0]! } : null;
+}
+
+/** The most times in a row the run presses one control: a "Continue" the server refuses, a resubmit. */
+export const REPEATS = 3;
+
+/** How many times in a row the history pressed this control, by its label; waits and scrolls do not count. */
+function presses(action: Action, history: HistoryEntry[]): number {
+  let count = 0;
+  for (const entry of [...history].reverse()) {
+    if (entry.kind === "wait" || entry.kind === "scroll") continue;
+    if (entry.kind !== "click" || entry.action !== action.label) break;
+    count++;
+  }
+  return count;
+}
+
+/** Asks that walk a flow to its end ("proceed to the review step", "request the quotation", "retire that record"). */
+const FLOW = /\b(?:proceed|continue|complete|submit|request|register|finish|retire)\b/i;
+const STEP: Labels = {
+  next: "goes on to the next step, submits or confirms",
+  back: "goes back, cancels or starts over",
+  offer: "a promotion, upgrade or special offer",
+  page: "opens another page, article or section of the site",
+};
+const NEXT_FLOOR = 0.6;
+/** At most this many controls are judged as a next step, buttons first. */
+const STEP_CAP = 12;
+const UPSELL = /\b(?:upgrade|offers?|deals?|promo\w*|trial|add[- ]?ons?)\b/i;
+const TOGGLES = new Set(["checkbox", "switch", "menuitemcheckbox"]);
+const ROUTE = /\b(?:navigation|page header|page footer|banner|contentinfo)\b/;
+/** How much each label reads as a next step; a label keeps its score for the session. */
+const nextness = new Map<string, number>();
+
+/**
+ * Zipline addition: when no part of the ask has a control left, a flow goes on
+ * to its next step ("Continue", "Get my quote", "Continue to review"). GLiNER2
+ * reads each button, then each main-content link, as a next step, a way back,
+ * an offer or another page; the most "next" one is pressed. A button the page
+ * drew again (each step's "Continue") may be pressed again. Row actions
+ * ("Manage" on every record) and upsells are not a next step. "stop" when the
+ * next step is one the ask forbids or the run may not take ("Place order").
+ */
+async function advance(model: Scorer, ordered: Map<string, Group>, history: HistoryEntry[], rules: Policy): Promise<Chosen | "stop" | null> {
+  const steps: Group[] = [];
+  for (const group of ordered.values()) {
+    const action = execute(group);
+    if (action.kind !== "click" || action.dialog || action.self_link || action.suggestion_for != null) continue;
+    if (OPTION_ROLES.has(action.role ?? "") || TOGGLES.has(action.role ?? "") || UPSELL.test(action.label) || sends(action)) continue;
+    if (action.role !== "button" && ROUTE.test(action.section ?? "")) continue;
+    const drawn = action.role === "button" && !history.some((e) => e.node === action.node && e.document_id === action.document_id);
+    if (group.open || (drawn && presses(action, history) < REPEATS)) steps.push(group);
+  }
+  const verb = (group: Group) => wordsOf(execute(group).label)[0];
+  const judged = steps.filter((g) => steps.filter((o) => verb(o) === verb(g)).length < 3)
+    .sort((a, b) => Number(execute(b).role === "button") - Number(execute(a).role === "button")).slice(0, STEP_CAP);
+  let found: [Group, number] | null = null;
+  for (const group of judged) {
+    // A link is a next step only when no button is (a landing page's "Start your quote").
+    if (found && execute(found[0]).role === "button" && execute(group).role !== "button") break;
+    const label = clean(execute(group).label);
+    if (!nextness.has(label)) nextness.set(label, (await model.classify(label, "step", STEP)).next ?? 0);
+    const score = nextness.get(label)!;
+    if (score >= NEXT_FLOOR && (!found || score > found[1])) found = [group, score];
+  }
+  if (!found) return null;
+  if (isUnsafe(execute(found[0]), rules)) return "stop";
+  return { requirement: null, score: found[1], group: found[0] };
+}
+
 /** A field that takes a date, judged by its label ("Departure", "Return", "Check-in", "Date"). */
 export function isDateField(action: Action): boolean {
   return /\b(date|dates|depart(ure|ing)?|return(ing)?|check[- ]?in|check[- ]?out|arriv(al|e|ing)|when|dd\/mm|mm\/dd)\b/i.test(action.label);
@@ -885,7 +1005,8 @@ export async function choose(
   model: Scorer, state: Page, history: HistoryEntry[], memory: Memory, refused: Set<string>,
   allParts: Part[], served: Set<string>, goal = "", rules: Policy = CLOSED,
 ): Promise<Decision> {
-  const parts = allParts.filter((p) => !served.has(p.text));
+  // A step that forbids something is not a requirement; it names what not to press.
+  const parts = allParts.filter((p) => !served.has(p.text) && !NEGATION.test(p.text));
   // Zipline addition: dates are resolved and matched in code. When an open
   // picker already shows the wanted day, scoring every part against 50 day
   // labels only to ignore the scores cost 1.3–3 s per step on Google Flights.
@@ -894,6 +1015,10 @@ export async function choose(
     ? { ordered: groups(state, history, refused), results: new Map() as Scores, latency: 0 }
     : await match(model, state, history, refused, memory, parts);
   let chosen = best(ordered, scores, parts, rules);
+  const flow = FLOW.test(allParts.map((p) => p.text).join(" "));
+  const outright = flow ? named(state, ordered, allParts.filter((p) => !NEGATION.test(p.text)), rules) : null;
+  // First: a radio can show the fields it asks about ("Date of birth (new patients)").
+  if (outright) chosen = [outright, ...chosen];
   const sending = await unsentForm(model, state, ordered, history, chosen, rules);
   if (sending) chosen = [sending, ...chosen];
   const committing = picked.length ? null : await suggestion(model, ordered, history, parts);
@@ -915,6 +1040,19 @@ export async function choose(
   if (target && !chosen.length) {
     const following = await followLink(model, state, ordered, history, parts, goal, target);
     if (following) chosen = [following];
+  }
+  // Zipline addition: with nothing left to choose, a flow goes on to its next
+  // step, and so does a step whose radio was just chosen, before a part takes
+  // a link elsewhere. The run ends when that next step is forbidden, not only
+  // when nothing scores (the review step before "Place order").
+  let stop = false;
+  const last = history[history.length - 1];
+  const answered = last?.kind === "click" && !sending && !outright && !chosen[0]?.group.takesValue &&
+    state.actions.some((a) => a.role === "radio" && a.checked === "true" && a.node === last.node && a.document_id === last.document_id);
+  if ((!chosen.length || answered) && flow) {
+    const next = await advance(model, ordered, history, rules);
+    if (next === "stop") [stop, chosen] = [true, []];
+    else if (next) chosen = [next];
   }
 
   let choice: string, operation: string, confidence: number, requirement: string | null, covered: string[];
@@ -948,7 +1086,8 @@ export async function choose(
     const patient = patience(allParts.map((p) => p.text).join(" "), parts.length, state, history, (a) => !isUnsafe(a, rules));
     const wait = patient?.kind === "wait" || (history.length && waited < 2) ? control(state, "wait") : undefined;
     const scroll = waited < 4 && !jumpedTo(state, history, allParts) ? control(state, "scroll_down") : undefined;
-    if (patient?.kind === "retry") [choice, operation, confidence] = [patient.action.id, "CLICK", 1.0];
+    if (stop) [choice, operation, confidence] = ["DONE", "DONE", 1.0];
+    else if (patient?.kind === "retry") [choice, operation, confidence] = [patient.action.id, "CLICK", 1.0];
     else if (wait) [choice, operation, confidence] = [wait.id, "WAIT", 1.0];
     else if (scroll) [choice, operation, confidence] = [scroll.id, "SCROLL_DOWN", 1.0];
     else {

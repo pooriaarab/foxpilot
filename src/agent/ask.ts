@@ -18,7 +18,8 @@ export type Ask = {
   values: Dictated[];
 };
 
-const PREAMBLE = /^(?:open|visit|go to) this page\/?(?:\s+in (?:the|your) browser|\s*[—–-]+\s[^.!?]*)?\s*[.!?](?:\s+|$)/i;
+// The description may hold a domain ("records view for fernvale-labs.example.net."): a dot before a letter does not end it.
+const PREAMBLE = /^(?:open|visit|go to) this page\/?(?:\s+in (?:the|your) browser|\s*[—–-]+\s(?:[^.!?]|[.!?](?=\w))*)?\s*[.!?](?:\s+|$)/i;
 
 const QUOTED = /"([^"\n]{1,80})"|“([^”\n]{1,80})”|(?<![\p{L}\p{N}])'([^'\n]{1,80})'(?![\p{L}\p{N}])/gu;
 /** A quoted name of a control to press is not a value: 'Click the "Reveal code" button'. */
