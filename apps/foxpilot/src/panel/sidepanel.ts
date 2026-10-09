@@ -8,10 +8,12 @@ import { LlmWriter, SpanWriter, type FieldWriter } from "@foxpilot/agent/fieldte
 import { Reporter, type Answer } from "@foxpilot/core/report";
 import { verify, type Check, type Verdict } from "@foxpilot/agent/verify";
 import { onSite, siteIn, withoutSite } from "@foxpilot/core/page/site";
-import { Gliner2, type ModelCall } from "@foxpilot/core/model/gliner2";
+import type { Gliner2, ModelCall } from "@foxpilot/core/model/gliner2";
+import { loadModel, type AppModel } from "@foxpilot/core/model/load";
 import { TabGroupStatus } from "./tabgroup";
 
-export const FOXMIND_MODEL = "pooria/foxmind";
+/** app.config.mjs `model`, set by scripts/build.mjs from packages/core/src/model/models.ts. */
+declare const __MODEL__: AppModel;
 
 // MV3 forbids remote code and blob: imports, so ONNX Runtime loads from ort/.
 env.useWasmCache = false;
@@ -109,23 +111,20 @@ function refreshRun() {
 }
 
 async function loadGliner(): Promise<number> {
-  setModel("gliner", "loading", "Downloading 614 MB once, then cached…", 0);
+  const hub = __MODEL__.delivery === "hub";
+  setModel("gliner", "loading", hub ? "Downloading once, then cached…" : `Loading ${__MODEL__.name} from the extension…`, 0);
   try {
     const started = performance.now();
-    gliner = await Gliner2.load(FOXMIND_MODEL, {
-      device: "webgpu",
-      dtype: "fp16",
-      progress_callback: (info) => {
-        const i = info as { status?: string; progress?: number };
-        if (i.status === "progress_total" && typeof i.progress === "number") {
-          setModel("gliner", "loading", `Downloading… ${Math.round(i.progress)}%`, i.progress / 100);
-        }
-      },
+    gliner = await loadModel(__MODEL__, (info) => {
+      const i = info as { status?: string; progress?: number };
+      if (i.status === "progress_total" && typeof i.progress === "number") {
+        setModel("gliner", "loading", `${hub ? "Downloading" : "Loading"}… ${Math.round(i.progress)}%`, i.progress / 100);
+      }
     });
-    // Compile the WebGPU shaders now rather than on the first step.
+    // Compile the WebGPU shaders (or the wasm session) now rather than on the first step.
     await gliner.classify("warm up", "warmup", { a: undefined, b: undefined });
     const ms = Math.round(performance.now() - started);
-    setModel("gliner", "ok", `Ready on WebGPU · loaded in ${(ms / 1000).toFixed(1)} s`);
+    setModel("gliner", "ok", `Ready on ${__MODEL__.device === "webgpu" ? "WebGPU" : __MODEL__.device} · loaded in ${(ms / 1000).toFixed(1)} s`);
     return ms;
   } catch (error) {
     setModel("gliner", "bad", `Failed to load: ${error instanceof Error ? error.message : error}`);
