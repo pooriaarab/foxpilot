@@ -4,11 +4,10 @@
 // token ids and results match it (tests/parity.test.ts).
 import { AutoModel, AutoTokenizer, Tensor, env } from "@huggingface/transformers";
 import type { PreTrainedModel, PreTrainedTokenizer } from "@huggingface/transformers";
+import type { Device, Dtype } from "./models";
 import type { Labels } from "./scorer";
 
 export type Entity = { text: string; confidence: number; start: number; end: number };
-export type Device = "webgpu" | "wasm" | "cpu";
-export type Dtype = "fp32" | "fp16";
 
 /** Same pattern as gliner2's WhitespaceTokenSplitter. */
 const WORD =
@@ -42,33 +41,37 @@ export type ModelCall = {
   decision?: { step: number; choice: string; operation: string; target: string | null; requirement: string | null };
 };
 
-type Output = "cls_logits" | "count_logits" | "span_logits";
 type Read = { data: number[]; dims: number[] };
 
 export class Gliner2 {
   /** When set, every call is appended here. Null (the default) costs one check per call. */
   recorder: ModelCall[] | null = null;
 
-  private constructor(
+  constructor(
     private readonly model: PreTrainedModel,
     private readonly tokenizer: PreTrainedTokenizer,
     private readonly ids: Record<Special, number>,
   ) {}
 
-  static async load(
+  /** Loads into the calling class, so Gliner25.load gives a Gliner25. */
+  static async load<T extends Gliner2>(
+    this: new (model: PreTrainedModel, tokenizer: PreTrainedTokenizer, ids: Record<Special, number>) => T,
     modelId: string,
     options: {
       device?: Device;
       dtype?: Dtype;
+      /** Hub commit to download; models.ts pins one per model. */
+      revision?: string;
       progress_callback?: (info: unknown) => void;
       /** ONNX Runtime session options; bench/bench.ts uses them. */
       session_options?: Record<string, unknown>;
     } = {},
-  ): Promise<Gliner2> {
+  ): Promise<T> {
     const device = options.device ?? "webgpu";
-    const tokenizer = await AutoTokenizer.from_pretrained(modelId);
+    const tokenizer = await AutoTokenizer.from_pretrained(modelId, { revision: options.revision });
     const model = await AutoModel.from_pretrained(modelId, {
       device,
+      revision: options.revision,
       dtype: options.dtype ?? "fp16",
       progress_callback: options.progress_callback,
       // On WebGPU, outputs stay on the GPU. Reading every output back costs
@@ -87,7 +90,7 @@ export class Gliner2 {
         return [token, encoded[0]!];
       }),
     ) as Record<Special, number>;
-    return new Gliner2(model, tokenizer, ids);
+    return new this(model, tokenizer, ids);
   }
 
   private pieces(text: string): number[] {
@@ -147,7 +150,7 @@ export class Gliner2 {
    * padded to the longest with 0 (attention mask 0); a row's outputs past its
    * own label and word counts are padding. Every output on the GPU is released.
    */
-  private async run<K extends Output>(rows: Encoded[], names: K[]): Promise<Record<K, Read>> {
+  protected async run<K extends string>(rows: Encoded[], names: K[]): Promise<Record<K, Read>> {
     const long = (values: number[][]) => {
       const n = Math.max(...values.map((row) => row.length));
       const data = BigInt64Array.from(values.flatMap((row) => [...row, ...new Array<number>(n - row.length).fill(0)]), BigInt);
@@ -158,9 +161,9 @@ export class Gliner2 {
       attention_mask: long(rows.map((row) => new Array<number>(row.inputIds.length).fill(1))),
       word_positions: long(rows.map((row) => row.wordPositions)),
       schema_positions: long(rows.map((row) => row.schemaPositions)),
-    })) as Record<Output, Tensor>;
+    })) as Record<string, Tensor>;
     try {
-      const read = await readBack(names.map((name) => outputs[name]));
+      const read = await readBack(names.map((name) => outputs[name]!));
       return Object.fromEntries(
         names.map((name, i) => [name, { data: Array.from(read[i]!.to("float32").data as Float32Array), dims: read[i]!.dims }]),
       ) as Record<K, Read>;

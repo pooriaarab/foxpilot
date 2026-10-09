@@ -9,6 +9,7 @@ export default {
     background: "src/background/background.ts",
     kit: { in: "@foxpilot/core/page/kit", format: "iife" },
   },
-  // The panel runs foxmind (GLiNER2-based) itself, so the build ships ONNX Runtime's wasm.
+  // A key of packages/core/src/model/models.ts. The panel runs foxmind (GLiNER2-based)
+  // itself, so the build ships ONNX Runtime's wasm. foxmind downloads from the Hub.
   model: "foxmind",
 };

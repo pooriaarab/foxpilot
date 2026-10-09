@@ -6,9 +6,10 @@
 // prompts against 4 single runs; needs the batched export, #90).
 import { env, Tensor } from "@huggingface/transformers";
 import { Gliner2 } from "@foxpilot/core/model/gliner2";
+import { models } from "@foxpilot/core/model/models";
 import type { Labels } from "@foxpilot/core/model/scorer";
 
-const HUB_MODEL = "pooria/foxmind";
+const HUB_MODEL = models.foxmind;
 const SAME_CALLS = 10;
 const NEW_CALLS = 10;
 const SWEEP_CALLS = 5;
@@ -25,7 +26,7 @@ const params = new URLSearchParams(location.search);
 const device = (params.get("device") ?? "webgpu") as "webgpu" | "wasm";
 const dtype = (params.get("dtype") ?? "fp16") as "fp16" | "fp32";
 const local = params.get("model");
-const MODEL = local ?? HUB_MODEL;
+const MODEL = local ?? HUB_MODEL.repo;
 const session = params.get("session") ?? "default";
 const tests = (params.get("tests") ?? "shape").split(",");
 const threads = params.get("threads");
@@ -91,7 +92,7 @@ async function main() {
     hardwareConcurrency: navigator.hardwareConcurrency,
   };
   const t = performance.now();
-  const model = await Gliner2.load(MODEL, { device, dtype, session_options: SESSIONS[session] });
+  const model = await Gliner2.load(MODEL, { device, dtype, revision: local ? undefined : HUB_MODEL.revision, session_options: SESSIONS[session] });
   result.loadMs = performance.now() - t;
   result.numThreads = wasm.numThreads;
   const encode = (text: string, labels: Labels) => model.encode(text, { name: "referenced", marker: "[L]", labels });
