@@ -47,23 +47,24 @@ async function poll(page, fn, arg, timeoutMs) {
     await sleep(250);
   }
 }
-async function openExtensionPage(page, target) {
+export async function openExtensionPage(page, target) {
   page.goto(target, { timeout: 0 }).catch(() => {});
   await poll(page, (u) => location.href === u && document.readyState === "complete", target, 30_000);
 }
 
-// The gecko id and the panel page come from the app's manifest. The UUID is
-// fixed per gecko id, so the panel URL is known before the extension loads.
-function extension(app) {
+// The gecko id comes from the app's manifest. The UUID is fixed per gecko id
+// (pass `prefs` to launch), so extension page URLs are known before it loads.
+export function extensionOf(app) {
   const manifest = JSON.parse(readFileSync(join(distOf(app), "manifest.json"), "utf8"));
   const id = manifest.browser_specific_settings.gecko.id;
   const hex = createHash("sha256").update(id).digest("hex");
   const uuid = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
-  return { id, uuid, panel: `moz-extension://${uuid}/${manifest.sidebar_action.default_panel}` };
+  return { id, uuid, manifest, prefs: { "extensions.webextensions.uuids": JSON.stringify({ [id]: uuid }) } };
 }
 
 export async function launch({ app, headless = false }) {
-  const { id, uuid, panel: panelUrl } = extension(app);
+  const { uuid, manifest, prefs } = extensionOf(app);
+  const panelUrl = `moz-extension://${uuid}/${manifest.sidebar_action.default_panel}`;
   const profile = mkdtempSync(join(tmpdir(), "foxpilot-"));
   const browser = await puppeteer.launch({
     browser: "firefox",
@@ -74,7 +75,7 @@ export async function launch({ app, headless = false }) {
     args: ["-remote-allow-system-access"],
     defaultViewport: null,
     protocolTimeout: LONG_MS,
-    extraPrefsFirefox: { "extensions.webextensions.uuids": JSON.stringify({ [id]: uuid }) },
+    extraPrefsFirefox: prefs,
   });
   const close = async () => {
     await browser.close().catch(() => {});
