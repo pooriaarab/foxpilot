@@ -1,5 +1,5 @@
 // Captures snapshot.js observations of real pages for controller parity tests.
-// Usage: node tests/capture.mjs  → tests/fixtures/*.json
+// Usage: node packages/agent/tests/capture.mjs  → packages/agent/tests/fixtures/*.json
 import { writeFileSync } from "node:fs";
 import { chromium } from "playwright";
 import { snapshot } from "@foxpilot/core/page/snapshot.js";

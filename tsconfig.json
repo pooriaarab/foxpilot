@@ -11,5 +11,5 @@
     "noEmit": true,
     "isolatedModules": true
   },
-  "include": ["apps", "tests", "packages"]
+  "include": ["apps", "packages", "vitest.config.ts"]
 }
