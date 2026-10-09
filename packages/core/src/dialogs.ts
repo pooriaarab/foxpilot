@@ -1,9 +1,9 @@
 // Dialogs the goal does not ask for, and consent walls the goal says to refuse.
 // The controller picks controls for the goal; this file picks the control that
 // says no. GLiNER2 classifies each button; code applies the order and the limits.
-import { firstDate } from "@foxpilot/core/text/dates";
-import type { Labels, Scorer } from "./controller";
-import type { Action, HistoryEntry } from "@foxpilot/core/page/types";
+import { firstDate } from "./text/dates";
+import type { Labels, Scorer } from "./model/scorer";
+import type { Action, HistoryEntry } from "./page/types";
 
 /** What the goal says about dialogs: refuse optional consent, decline prompts, or nothing. */
 export type Stance = "refuse" | "decline" | "none";

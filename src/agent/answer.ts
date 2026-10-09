@@ -4,12 +4,10 @@
 // among the ones that look like answers, a second call asks which one the
 // goal refers to. Nothing is highlighted below 0.5.
 import { nameInjected, type TabBrowser } from "@foxpilot/core/page/browser";
-import type { Scorer } from "./controller";
+import type { Scorer } from "@foxpilot/core/model/scorer";
+import type { Answer } from "@foxpilot/core/report";
 import { choose, describe, parseClock, parseDuration, parseMoney, qualifiers, type Row } from "./pick";
 import { searchQuery } from "./search";
-
-/** `slots`: the values a report clause asked for, by slot (report.ts). */
-export type Answer = { text: string; score: number; label?: string; slots?: Record<string, string> };
 
 const MAX_CANDIDATES = 24;
 
