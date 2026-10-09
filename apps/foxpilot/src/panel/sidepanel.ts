@@ -426,7 +426,7 @@ async function run({ goal, tabId, llm: useLlm = false, record = false }: RunOpti
     let answer: Answer | null = null;
     if (view.status === "done") {
       $("clock-sub").textContent = "Checking the page against the goal…";
-      verdict = view.verdict ?? await verify(model, await browser.observe(), view.parts, view.history).catch((error) => {
+      verdict = view.verdict ?? await verify(model, await browser.observeLoaded(), view.parts, view.history).catch((error) => {
         console.error("verify failed", error);
         return null;
       });

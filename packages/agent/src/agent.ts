@@ -97,8 +97,6 @@ function completedDates(parts: Part[], page: Page, history: HistoryEntry[]): Set
   return completed;
 }
 
-const SETTLE_MS = 1000;
-
 const hasControls = (page: Page) => page.actions.some((a) => a.kind === "click" || a.kind === "fill" || a.kind === "select");
 
 /** A step that sent a form: a real submit, Enter, or a click on its Search button. */
@@ -437,21 +435,14 @@ export class Agent {
    * Zipline addition: the Python loop ends after two waits and two scrolls find
    * nothing left to do (2–4 s on Google Flights). Once every value is entered and
    * the form was just sent, the finished page is checked instead; if it shows
-   * the goal, the run ends there. Results get up to a second to finish loading first.
+   * the goal, the run ends there. Results get up to 3 s to finish loading first.
    */
   private async finishIfVerified(navigations: number) {
     // A search that loads a new page (Amazon) leaves the old one up for a
     // moment; checking it would verify and read the page the search came from.
     await this.browser.settleNavigation(navigations);
-    // Wait until two looks in a row read the same page (results done loading), at most SETTLE_MS.
-    const until = performance.now() + SETTLE_MS;
-    let previous = this.page.fingerprint;
-    for (;;) {
-      await new Promise((resolve) => setTimeout(resolve, 150));
-      this.page = await this.browser.observe();
-      if (this.page.fingerprint === previous || performance.now() >= until) break;
-      previous = this.page.fingerprint;
-    }
+    // Results can still be drawing: read them once the page is quiet.
+    this.page = await this.browser.observeLoaded();
     const verdict = await verify(this.model, this.page, this.parts, this.view.history);
     if (!verdict.verified) return;
     this.view.verdict = verdict;

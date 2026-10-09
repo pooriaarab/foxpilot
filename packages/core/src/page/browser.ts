@@ -237,6 +237,19 @@ export class TabBrowser {
     throw new StalePage("Page did not settle");
   }
 
+  /**
+   * Reads the page once it has stopped loading: quiet DOM, no progress
+   * indicator, at most `capMs`. For the read that is judged, not for each step.
+   */
+  async observeLoaded(capMs = 3000): Promise<Page> {
+    try {
+      await this.call("ready", capMs);
+    } catch {
+      // navigation interrupted the wait; observe anyway
+    }
+    return this.observe();
+  }
+
   /** Is the page still the one `page` read? When not, `stale` names the check that failed. */
   async fresh(page: Page, action?: Action): Promise<boolean> {
     if (action && (action.kind === "click" || action.kind === "select")) {
