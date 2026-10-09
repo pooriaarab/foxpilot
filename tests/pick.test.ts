@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { choose, describe as label, parseClock, parseDuration, parseMoney, qualifiers, stripQualifiers, type Row } from "../src/agent/pick";
+import { choose, describe as label, parseClock, parseDuration, parseMoney, qualifiers, stripQualifiers, type Row } from "@foxpilot/agent/pick";
 
 describe("qualifiers", () => {
   it("reads order, time window and nonstop from the goal", () => {
