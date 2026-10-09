@@ -135,6 +135,17 @@ async function sendFlow(tab, kind) {
   s = await state();
   expect("F2 clean, at once", quick && s.sent.length === 1 && s.sent[0] === CLEAN.text && s.prompts === 0, s);
 
+  // A click right after typing, before the 300 ms detect wait ends, on a new composer.
+  await fresh(tab);
+  await tab.click("#reset");
+  await tab.click("#composer");
+  await tab.keyboard.type(PII.text);
+  await tab.click("#send");
+  const early = await promptOpens(tab);
+  s = await state();
+  expect("F4 PII, click at once", early && !s.sent.length, s);
+  await press(tab, "cancel");
+
   let { typed, opened } = await piiHeld("enter");
   s = await state();
   expect("F3 PII, Enter held", opened && !s.sent.length, s);
@@ -242,6 +253,6 @@ writeFileSync(out, JSON.stringify(record, null, 2));
 console.log(JSON.stringify({ timing, perType }, null, 1));
 const flowFails = flow.filter((f) => !f.pass).map((f) => `${f.kind} ${f.id}`);
 console.log(`send guard: ${flow.length - flowFails.length}/${flow.length} ok${flowFails.length ? `; FAIL: ${flowFails.join(", ")}` : ""}`);
-const ok = !failure && record.timeouts === 0 && flow.length === KINDS.length * 12 && !flowFails.length;
+const ok = !failure && record.timeouts === 0 && flow.length === KINDS.length * 13 && !flowFails.length;
 console.log(`${ok ? "PASS" : "FAIL"} pii-guard${failure ? `: ${failure}` : ""} | ${out}`);
 process.exit(ok ? 0 : 1);

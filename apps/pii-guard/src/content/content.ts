@@ -432,7 +432,8 @@ addEventListener("keydown", (event) => {
 }, true);
 addEventListener("click", (event) => {
   const button = event.target instanceof Element ? event.target.closest<HTMLElement>(SEND) : null;
-  const composer = current?.composer;
+  // The composer typed in last: `current` is set only after the detect wait, so a fast click would slip past.
+  const composer = pending?.isConnected ? pending : current?.composer;
   if (!button || !composer?.isConnected) return;
   // The site can re-render its send button after a redaction.
   guard(event, composer, () => (button.isConnected ? button : document.querySelector<HTMLElement>(SEND))?.click());
