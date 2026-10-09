@@ -8,7 +8,7 @@ import { LlmWriter, SpanWriter, type FieldWriter } from "../agent/fieldtext";
 import { Reporter } from "../agent/report";
 import { verify, type Check, type Verdict } from "../agent/verify";
 import { onSite, siteIn, withoutSite } from "../agent/site";
-import { Gliner2 } from "../model/gliner2";
+import { Gliner2, type ModelCall } from "../model/gliner2";
 import { TabGroupStatus } from "./tabgroup";
 
 export const GLINER_MODEL = "onnx-community/gliner2-multi-v1-agent-ONNX";
@@ -264,7 +264,10 @@ function showNote(text: string) {
 /** One action of a finished run: what it did, ms since the action before it, and where that time went. */
 export type RunStep = { step: number; operation: string; action: string; text: string | null; ms: number; timing?: Timing };
 
-export type RunOptions = { goal: string; tabId: number; llm?: boolean };
+export type RunOptions = { goal: string; tabId: number; llm?: boolean;
+  /** Save every GLiNER2 call in `modelCalls`. Off by default. */
+  record?: boolean;
+};
 
 /** What `window.foxpilot.run` resolves to. A failed run is a result with status "error", never a rejection. */
 export type RunResult = {
@@ -288,6 +291,8 @@ export type RunResult = {
   /** The model load this run waited for; 0 when an earlier run in this panel paid for it. */
   modelLoadMs: number;
   evaluateCalls: Record<string, Calls>;
+  /** Set when the run asked for `record`: every GLiNER2 call and the decision it fed. */
+  modelCalls?: ModelCall[];
 };
 
 /** The controls the agent sees on a tab, without geometry and guards. */
@@ -338,7 +343,7 @@ function outcome(view: AgentView, verdict: Verdict | null, answer: Answer | null
   };
 }
 
-async function run({ goal, tabId, llm: useLlm = false }: RunOptions): Promise<RunResult> {
+async function run({ goal, tabId, llm: useLlm = false, record = false }: RunOptions): Promise<RunResult> {
   const result: RunResult = {
     id: 0, goal: goal.trim(), url: "", status: "error", verified: false, answer: null, checks: [], steps: [],
     decisions: [], refusals: [], textCalls: [], totalMs: 0, modelLoadMs: 0, evaluateCalls: {},
@@ -390,6 +395,10 @@ async function run({ goal, tabId, llm: useLlm = false }: RunOptions): Promise<Ru
     const setup = performance.now();
     await browser.evaluate(clear).catch(() => {});
     const model = gliner!;
+    // Field text never reaches a recorded call: password fields are not in the snapshot.
+    const calls: ModelCall[] | null = record ? [] : null;
+    model.recorder = calls;
+    if (calls) result.modelCalls = calls;
     // Reads each page the run visits when the goal asks to report values.
     const reporter = new Reporter(model, browser, result.goal);
     reporter.seen(0);
@@ -403,6 +412,7 @@ async function run({ goal, tabId, llm: useLlm = false }: RunOptions): Promise<Ru
         void status.update(view);
         reporter.seen(view.history.length);
       },
+      calls,
     );
     const loopStart = performance.now();
     const page = await browser.evaluate(pageInfo).catch(() => null);
@@ -488,6 +498,7 @@ async function run({ goal, tabId, llm: useLlm = false }: RunOptions): Promise<Ru
     refreshRun();
     result.totalMs = Math.round(performance.now() - started);
     result.evaluateCalls = Object.fromEntries(Object.entries(result.evaluateCalls).map(([name, c]) => [name, { count: c.count, ms: Math.round(c.ms) }]));
+    if (gliner) gliner.recorder = null;
     lastResult = result;
     busy = false;
   }
