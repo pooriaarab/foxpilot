@@ -15,9 +15,9 @@ type OracleCase = {
   decision: { choice: string; operation: string; target: string | null; requirement: string | null; covered: string[]; commits: boolean; date: string | null; confidence: number };
 };
 
-const ROOT = new URL("..", import.meta.url).pathname;
-const oracle = existsSync(`${ROOT}tests/fixtures/oracle.json`)
-  ? (JSON.parse(readFileSync(`${ROOT}tests/fixtures/oracle.json`, "utf8")) as OracleCase[])
+const ROOT = new URL("../../..", import.meta.url).pathname;
+const oracle = existsSync(`${ROOT}packages/agent/tests/fixtures/oracle.json`)
+  ? (JSON.parse(readFileSync(`${ROOT}packages/agent/tests/fixtures/oracle.json`, "utf8")) as OracleCase[])
   : [];
 const have = oracle.length > 0 && existsSync(`${ROOT}dist-model/onnx/model.onnx`);
 env.allowRemoteModels = false;
@@ -31,7 +31,7 @@ describe.skipIf(!have)("controller vs Python", () => {
 
   for (const c of oracle) {
     it(`${c.name}: same requirements and decision`, async () => {
-      const state = (JSON.parse(readFileSync(`${ROOT}tests/fixtures/${c.name}.json`, "utf8")) as { state: Page }).state;
+      const state = (JSON.parse(readFileSync(`${ROOT}packages/agent/tests/fixtures/${c.name}.json`, "utf8")) as { state: Page }).state;
       const parts = await requirements(c.goal, model);
       expect(parts).toEqual(c.parts);
       const decision = await choose(model, state, c.history, new Map(), new Set(), parts, new Set());
@@ -48,7 +48,7 @@ describe.skipIf(!have)("controller vs Python", () => {
   // ("One way trip from New York … to Denver.") must not keep the form's ticket
   // type below the floor, which sent a one-way goal off as a round trip.
   it("flights with tracked-price cards: ticket type first", async () => {
-    const state = (JSON.parse(readFileSync(`${ROOT}tests/fixtures/flights-tracked.json`, "utf8")) as { state: Page }).state;
+    const state = (JSON.parse(readFileSync(`${ROOT}packages/agent/tests/fixtures/flights-tracked.json`, "utf8")) as { state: Page }).state;
     const goal = oracle.find((c) => c.name === "flights-start")!.goal;
     const parts = await requirements(goal, model);
     const decision = await choose(model, state, [], new Map(), new Set(), parts, new Set());
@@ -59,7 +59,7 @@ describe.skipIf(!have)("controller vs Python", () => {
   // Zipline addition: "Search" was clicked early, then the ticket type changed.
   // The form has something new to send, so Search is pressed again.
   it("flights: search again after the form changed", async () => {
-    const state = (JSON.parse(readFileSync(`${ROOT}tests/fixtures/flights-resend.json`, "utf8")) as { state: Page }).state;
+    const state = (JSON.parse(readFileSync(`${ROOT}packages/agent/tests/fixtures/flights-resend.json`, "utf8")) as { state: Page }).state;
     const goal = oracle.find((c) => c.name === "flights-start")!.goal;
     const parts = await requirements(goal, model);
     const doc = state.actions[0]!.document_id;
@@ -83,7 +83,7 @@ describe.skipIf(!have)("controller vs Python", () => {
   // Zipline addition: with the calendar open on the wanted day, the date is
   // matched in code and GLiNER2 is not called at all.
   it("clicks the wanted day in an open calendar without model calls", async () => {
-    const state = (JSON.parse(readFileSync(`${ROOT}tests/fixtures/flights-calendar.json`, "utf8")) as { state: Page }).state;
+    const state = (JSON.parse(readFileSync(`${ROOT}packages/agent/tests/fixtures/flights-calendar.json`, "utf8")) as { state: Page }).state;
     const parts = await requirements("Find a one-way ticket from New York to San Francisco on the 1st Friday of next month", model, new Date(2026, 8, 25));
     const served = new Set(parts.filter((p) => !p.date).map((p) => p.text));
     const refuse = () => { throw new Error("model called"); };

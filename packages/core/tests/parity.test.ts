@@ -14,7 +14,7 @@ type Case = {
   result: { entities?: Record<string, { text: string; confidence: number }[]> } & Record<string, unknown>;
 };
 
-const ROOT = new URL("..", import.meta.url).pathname;
+const ROOT = new URL("../../..", import.meta.url).pathname;
 const ref = JSON.parse(readFileSync(`${ROOT}export/reference.json`, "utf8")) as { cases: Case[] };
 const have = existsSync(`${ROOT}dist-model/onnx/model.onnx`);
 

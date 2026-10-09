@@ -10,7 +10,7 @@ import { findAnswer, lastRows } from "@foxpilot/agent/answer";
 import type { TabBrowser } from "@foxpilot/core/page/browser";
 import { Gliner2 } from "@foxpilot/core/model/gliner2";
 
-const ROOT = new URL("..", import.meta.url).pathname;
+const ROOT = new URL("../../..", import.meta.url).pathname;
 const have = existsSync(`${ROOT}dist-model/onnx/model.onnx`);
 env.allowRemoteModels = false;
 env.localModelPath = ROOT;
@@ -20,7 +20,7 @@ describe.skipIf(!have)("answer highlight on fixtures", () => {
   beforeAll(async () => {
     server = createServer((req, res) => {
       res.setHeader("content-type", "text/html");
-      createReadStream(`${ROOT}tests/fixtures${new URL(req.url!, "http://x").pathname}`).pipe(res);
+      createReadStream(`${ROOT}packages/agent/tests/fixtures${new URL(req.url!, "http://x").pathname}`).pipe(res);
     }).listen(5403);
     browser = await chromium.launch();
     page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
