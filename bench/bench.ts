@@ -8,7 +8,7 @@ import { env, Tensor } from "@huggingface/transformers";
 import { Gliner2 } from "@foxpilot/core/model/gliner2";
 import type { Labels } from "@foxpilot/core/model/scorer";
 
-const HUB_MODEL = "pooria/gliner2-multi-v1-agent-batch-ONNX";
+const HUB_MODEL = "pooria/foxmind";
 const SAME_CALLS = 10;
 const NEW_CALLS = 10;
 const SWEEP_CALLS = 5;

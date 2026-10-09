@@ -9,6 +9,6 @@ export default {
     background: "src/background/background.ts",
     kit: { in: "@foxpilot/core/page/kit", format: "iife" },
   },
-  // The panel runs GLiNER2 itself, so the build ships ONNX Runtime's wasm.
-  model: "gliner2-multi-v1",
+  // The panel runs foxmind (GLiNER2-based) itself, so the build ships ONNX Runtime's wasm.
+  model: "foxmind",
 };
