@@ -43,7 +43,8 @@ function setModel(prefix: "gliner" | "llm", state: "idle" | "loading" | "ok" | "
   $(`${prefix}-status`).textContent = text;
   const bar = $(`${prefix}-progress`);
   bar.hidden = state !== "loading";
-  if (progress !== undefined) (bar.firstElementChild as HTMLElement).style.width = `${Math.round(progress * 100)}%`;
+  // transform, not width, so the bar moves without a layout on each step.
+  if (progress !== undefined) (bar.firstElementChild as HTMLElement).style.transform = `scaleX(${Math.min(1, Math.max(0, progress))})`;
 }
 
 /** Where a run starts when the tab is a page Firefox never lets extensions drive (New Tab, about:…). */
