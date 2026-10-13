@@ -11,6 +11,8 @@
   --accent: oklch(0.73 0.165 52);
   --accent-ink: oklch(0.2 0.03 50);
   --bad: oklch(0.7 0.17 25);
+  /* Text on a --bad fill: 6.3:1 here, 5.7:1 in light (WCAG AA). */
+  --bad-ink: oklch(0.2 0.03 25);
   --ok: oklch(0.77 0.14 152);
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --fast: 160ms;
@@ -28,6 +30,7 @@
     --accent: oklch(0.6 0.17 45);
     --accent-ink: oklch(0.99 0.01 80);
     --bad: oklch(0.53 0.19 25);
+    --bad-ink: oklch(0.99 0 0);
     --ok: oklch(0.52 0.13 152);
   }
 }
@@ -131,10 +134,12 @@ h1 {
 }
 
 .progress div {
-  width: 0;
+  width: 100%;
   height: 100%;
   background: var(--accent);
-  transition: width 0.3s;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 220ms var(--ease-out);
 }
 
 .switch {
@@ -259,7 +264,7 @@ textarea:focus {
 
 #run.stop {
   background: var(--bad);
-  color: oklch(0.99 0 0);
+  color: var(--bad-ink);
 }
 
 .clock {
@@ -330,7 +335,7 @@ textarea:focus {
 
 .op.CLICK,
 .op.SELECT {
-  background: color-mix(in srgb, var(--ok) 25%, transparent);
+  background: color-mix(in srgb, var(--muted) 22%, transparent);
 }
 
 .ms {
