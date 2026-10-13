@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "foxpilot",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A browser agent that runs entirely on your device: foxmind, an on-device model on WebGPU, reads the page and drives it toward your goal.",
   "browser_specific_settings": {
     "gecko": {
