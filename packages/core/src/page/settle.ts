@@ -1,0 +1,59 @@
+// Runs in the page after each action. Kept apart from browser.ts so tests can load it.
+// scripting.executeScript sends only the function's source, so it uses nothing from module scope.
+import type { Action } from "./types";
+
+/** Waits after input: for autocomplete options to render, or a couple of frames; then for a quiet DOM. */
+export function settle(action: Action): Promise<void> { return new Promise(resolve => {
+  const field=window.__glinerFast?.nodes.get(action.node!);
+  const autocomplete=action.kind==='fill' && (field?.getAttribute('role')==='combobox' ||
+    field?.getAttribute('aria-autocomplete')==='list' || field?.hasAttribute('aria-controls'));
+  // Zipline addition: a click that opens a menu waits for its options too.
+  const menu=action.kind==='click' && !!field && (field.hasAttribute('aria-haspopup') ||
+    field.hasAttribute('aria-expanded') || field.getAttribute('role')==='combobox');
+  // Zipline addition: a button inside a picker ("Done") closes it; the page is
+  // read once it has gone, not mid-animation (a fading calendar was scored at 2 s).
+  const dialogRoot=field?.closest('dialog,[role="dialog"],[role="alertdialog"],[aria-modal="true"]');
+  // A day in a calendar grid or an option in a list keeps the picker open.
+  const closing=action.kind==='click' && !!dialogRoot && !menu &&
+    !['gridcell','option','menuitem','menuitemradio','tab'].includes(field!.getAttribute('role')||'') &&
+    !field!.closest('[role="grid"],[role="listbox"],[role="menu"],[role="tablist"],table');
+  const gone=()=>!dialogRoot!.isConnected || !dialogRoot!.checkVisibility({checkOpacity:true,checkVisibilityCSS:true}) ||
+    parseFloat(getComputedStyle(dialogRoot!).opacity)<0.05;
+  let frames=0, stopped=false; const started=performance.now();
+  // Zipline addition: then wait for about 120 ms with no DOM change, so a page
+  // that is still drawing is not read and refused 1–4 s later. A page that never
+  // stops (map animations, tickers) is read at the cap. The action outline
+  // (markTarget's #zipline-action) is not the page and does not count.
+  let last=started;
+  const observer=new MutationObserver(records=>{
+    if (records.some(r=>![...r.addedNodes,...r.removedNodes].some(n=>(n as Element).id==='zipline-action'))) last=performance.now();
+  });
+  observer.observe(document.documentElement,{subtree:true,childList:true,attributes:true,characterData:true});
+  const quiet=()=>{
+    const now=performance.now();
+    if (now-last<120 && now-started<1200) { setTimeout(quiet,Math.min(120-(now-last),1200-(now-started))); return; }
+    observer.disconnect(); resolve();
+  };
+  const finish=()=>{if (stopped) return; stopped=true; quiet()};
+  setTimeout(finish,autocomplete ? 600 : menu || closing ? 800 : 250);
+  const ready=()=>{
+    if (stopped) return;
+    const ids=(field?.getAttribute('aria-controls')||field?.getAttribute('aria-owns')||'').split(/\s+/).filter(Boolean);
+    const linked=ids.map(id=>document.getElementById(id)).filter(e=>e!==null);
+    // aria-controls can name an element that never holds the options (Google
+    // Flights' ticket type); a menu then shows them in a listbox or menu elsewhere.
+    const roots: ParentNode[]=linked.length ? linked : [document];
+    if (menu && linked.length) roots.push(...document.querySelectorAll('[role="listbox"],[role="menu"]'));
+    const options=roots.flatMap(root=>[...root.querySelectorAll('[role="option"],[role="gridcell"],[role="menuitem"],[role="menuitemradio"]')]);
+    if (++frames>=2 && closing) { if (gone()) finish(); else requestAnimationFrame(ready); return; }
+    // A menu button that reports its state must say it is open; a list that was
+    // already on the page otherwise ends the wait before the menu renders.
+    const opened=!menu || !field.hasAttribute('aria-expanded') || field.getAttribute('aria-expanded')==='true';
+    if (frames>=2 && opened && (autocomplete || menu ? options.some(e=>{
+      const r=e.getBoundingClientRect();
+      return r.width && r.height && r.bottom>0 && r.top<innerHeight && e.checkVisibility({checkOpacity:true,checkVisibilityCSS:true});
+    }) : performance.now()-started>=150)) finish();
+    else requestAnimationFrame(ready);
+  };
+  requestAnimationFrame(ready);
+}); }

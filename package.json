@@ -1,25 +1,42 @@
 {
-  "name": "zipline",
+  "name": "foxpilot",
   "version": "0.1.0",
   "private": true,
-  "description": "Zipline: a browser agent that runs entirely in Chrome, with GLiNER2 (and an optional small LLM) on WebGPU",
+  "packageManager": "pnpm@10.11.0",
+  "description": "foxpilot: a browser agent that runs entirely in Firefox, with foxmind, an on-device GLiNER2-based model (and an optional small LLM), on WebGPU",
   "type": "module",
+  "bin": {
+    "foxpilot": "bin/foxpilot.mjs"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "build": "node scripts/build.mjs",
-    "watch": "node scripts/build.mjs --watch"
+    "watch": "node scripts/build.mjs --watch",
+    "lint:ext": "node scripts/apps.mjs lint",
+    "ci:local": "pnpm typecheck && pnpm test && node scripts/apps.mjs build && pnpm lint:ext",
+    "e2e": "pnpm build && node scripts/e2e.mjs",
+    "e2e:pii": "node scripts/build.mjs pii-guard && node apps/pii-guard/e2e/run.mjs",
+    "e2e:consent": "node scripts/build.mjs consent-shield && node apps/consent-shield/e2e/run.mjs",
+    "bench:firefox": "node bench/run.mjs",
+    "eval": "pnpm build && node scripts/zoo/cli.mjs"
   },
   "license": "MIT",
   "dependencies": {
-    "@huggingface/transformers": "^4.3.0"
+    "@foxpilot/agent": "workspace:*",
+    "@foxpilot/core": "workspace:*",
+    "@huggingface/transformers": "^4.3.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/chrome": "^0.3.0",
     "@types/node": "^26.6.2",
     "esbuild": "^0.28.2",
     "playwright": "1.63.0",
+    "puppeteer": "^25.13.0",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.1"
+    "vitest": "^5.0.1",
+    "web-ext": "^10.7.0"
   }
 }

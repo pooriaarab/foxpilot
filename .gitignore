@@ -2,8 +2,7 @@
 dist-model/
 node_modules/
 dist/
-bench/bench.js
+bench/results/
 ref-ultrafast/
-.e2e-profile/
-e2e-page.png
-videos/
+artifacts/
+docs/benchmarks/*.json
