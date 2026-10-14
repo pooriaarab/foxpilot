@@ -1,0 +1,14 @@
+{
+  "name": "@foxpilot/agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "foxpilot browser agent: the code controller and the run loop. Ships TypeScript source.",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@foxpilot/core": "workspace:*",
+    "@huggingface/transformers": "^4.3.0"
+  }
+}

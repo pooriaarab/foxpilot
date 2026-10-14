@@ -1,0 +1,12 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Subscribe nag</title>
+<header style="position:sticky;top:0;background:#eee"><a href="#">Home</a> <a href="#">Subscribe</a></header>
+<p>A shop page for tea.</p>
+<div id="nag" data-dialog hidden style="position:fixed;top:30%;left:30%;padding:16px;background:#fff;border:1px solid">
+  <h2>Get 10% off your first order</h2>
+  <p>Join our newsletter.</p>
+  <input type="email" aria-label="Email"> <button>Subscribe</button> <button data-close>No thanks</button>
+</div>
+<script src="kit.js"></script>
+<script>setTimeout(() => (document.getElementById("nag").hidden = false), 1500);</script>

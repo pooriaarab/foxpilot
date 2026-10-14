@@ -3,7 +3,9 @@
 Feeds each recorded call's exact token ids and gather positions to the graph,
 decodes with the same rules the library uses (softmax for "referenced",
 count > 0 then sigmoid >= 0.5 spans and gliner2's own finalize_spans for
-entities), and compares with the Python results.
+entities), and compares with the Python results. Then runs the calls again in
+padded batches and checks that the scores each row gives (softmax, sigmoid)
+equal its single call within 1e-4.
 
 Usage: python export/verify_onnx.py [model.onnx]
 """
@@ -21,14 +23,19 @@ session = ort.InferenceSession(path, providers=["CPUExecutionProvider"])
 cases = json.loads((HERE / "reference.json").read_text())["cases"]
 
 
+def run_batch(tensors):
+    """One run over several calls, each row padded with 0 to the longest."""
+    rows = [{"input_ids": t["input_ids"], "attention_mask": [1] * len(t["input_ids"]),
+             "word_positions": t["word_positions"], "schema_positions": t["schema_positions"][0]} for t in tensors]
+    feeds = {}
+    for key in rows[0]:
+        n = max(len(r[key]) for r in rows)
+        feeds[key] = np.array([r[key] + [0] * (n - len(r[key])) for r in rows], dtype=np.int64)
+    return session.run(None, feeds)
+
+
 def run(t):
-    ids = np.array([t["input_ids"]], dtype=np.int64)
-    return session.run(None, {
-        "input_ids": ids,
-        "attention_mask": np.ones_like(ids),
-        "word_positions": np.array([t["word_positions"]], dtype=np.int64),
-        "schema_positions": np.array([t["schema_positions"][0]], dtype=np.int64),
-    })
+    return run_batch([t])
 
 
 def entities(case, count_logits, span_logits, threshold=0.5):
@@ -78,4 +85,41 @@ for case in cases:
         print(f"extract  {'✓' if same else '✗'} |Δconf| {max(diffs, default=0):.1e}  {found}")
 
 print(f"\n{len(cases)} calls, {mismatches} mismatches, worst |Δp| classify {worst_cls:.1e}, extract {worst_ent:.1e}")
-sys.exit(1 if mismatches else 0)
+
+
+def softmax(x):
+    e = np.exp(x.astype(np.float64) - x.max())
+    return e / e.sum()
+
+
+def scores(t, cls_logits, count_logits, span_logits):
+    """The values the agent reads from one call: label and count softmax, sigmoid of
+    each span that ends inside the text. Rows past the call's own sizes are padding."""
+    labels, words = len(t["schema_positions"][0]) - 1, len(t["word_positions"])
+    inside = (np.arange(words)[:, None] + np.arange(span_logits.shape[-1])[None, :]) < words
+    spans = span_logits[:labels, :words].astype(np.float64)[:, inside]
+    logits = [cls_logits[:labels], count_logits, spans]
+    return [softmax(cls_logits[:labels]), softmax(count_logits), 1 / (1 + np.exp(-spans))], logits
+
+
+# Batches: all classify calls, all extract calls, a mix of 4, and every call at once.
+# fp32 sums run in a different order once a row is padded, so raw logits (up to
+# about 80) drift by a few 1e-4; the scores the agent reads must stay within 1e-4.
+classify = [c["tensors"] for c in cases if c["kind"] == "classify"]
+extract = [c["tensors"] for c in cases if c["kind"] == "extract"]
+batches = {"classify": classify, "extract": extract, "mixed 4": [*classify[:2], *extract[:2]],
+           "all": [c["tensors"] for c in cases]}
+worst_batch = 0.0
+for name, tensors in batches.items():
+    batched = run_batch(tensors)
+    worst = worst_logit = 0.0
+    for i, t in enumerate(tensors):
+        got, got_logits = scores(t, *(out[i] for out in batched))
+        want, want_logits = scores(t, *(out[0] for out in run(t)))
+        worst = max([worst, *(np.abs(a - b).max() for a, b in zip(got, want))])
+        worst_logit = max([worst_logit, *(np.abs(a - b).max() for a, b in zip(got_logits, want_logits))])
+    worst_batch = max(worst_batch, worst)
+    print(f"batch {name:8} B={len(tensors):2} {'✓' if worst <= 1e-4 else '✗'} |Δscore| {worst:.1e}  |Δlogit| {worst_logit:.1e}")
+
+print(f"worst batched |Δscore| {worst_batch:.1e} (limit 1e-4)")
+sys.exit(1 if mismatches or worst_batch > 1e-4 else 0)
